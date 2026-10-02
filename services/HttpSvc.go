@@ -32,11 +32,11 @@ func MakeHttpRequest(req *models.HttpRequest) (models.HttpResponse, error) {
 
 	for _, h := range req.Headers {
 		if h.Value != nil {
-			hReq.Header.Add(h.Name, h.Value)
+			hReq.Header.Add(h.Name, *h.Value)
 		}
 		if h.Values != nil {
 			for _, v := range h.Values {
-				hReq.Header.Add(h.Name, v)
+				hReq.Header.Add(h.Name, *v)
 			}
 		}
 	}

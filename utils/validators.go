@@ -11,7 +11,7 @@ func ValidateHttpRequest(req *models.HttpRequest) error {
 	for _, h := range req.Headers {
 		_, ok := headers[h.Name]
 		if ok {
-			return fmt.Errorf("Duplicate header %w", h.Name)
+			return fmt.Errorf("Duplicate header %s", h.Name)
 		}
 		headers[h.Name] = struct{}{}
 		if (h.Value == nil) == (h.Values == nil) {
