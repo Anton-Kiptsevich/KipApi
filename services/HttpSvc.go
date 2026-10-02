@@ -36,7 +36,7 @@ func MakeHttpRequest(req *models.HttpRequest) (models.HttpResponse, error) {
 		}
 		if h.Values != nil {
 			for _, v := range h.Values {
-				hReq.Header.Add(h.Name, *v)
+				hReq.Header.Add(h.Name, v)
 			}
 		}
 	}
