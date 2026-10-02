@@ -14,7 +14,7 @@ func ValidateHttpRequest(req *models.HttpRequest) error {
 			return fmt.Errorf("Duplicate header %w", h.Name)
 		}
 		headers[h.Name] = struct{}{}
-		if (h.Value == "") == (h.Values == nil) {
+		if (h.Value == nil) == (h.Values == nil) {
 			return fmt.Errorf("Header can only have either Value or Values")
 		}
 	}
