@@ -6,6 +6,6 @@ type HttpRequest struct {
 	Method  string
 	BaseUrl string
 	Path    string
-	Headers map[models.HttpHeader]
+	Headers []models.HttpHeader
 	Body    string
 }
