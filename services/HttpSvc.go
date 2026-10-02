@@ -14,7 +14,7 @@ func MakeHttpRequest(req *models.HttpRequest) (models.HttpResponse, error) {
 	if err != nil {
 		return returnHttpError(err)
 	}
-	var body *strings.Reader
+	var body io.Reader
 	var hReq *http.Request
 	if req.Body != "" {
 		body = strings.NewReader(req.Body)
@@ -36,7 +36,7 @@ func MakeHttpRequest(req *models.HttpRequest) (models.HttpResponse, error) {
 		}
 		if h.Values != nil {
 			for _, v := range h.Values {
-				hReq.Header.Add(h.name, v)
+				hReq.Header.Add(h.Name, v)
 			}
 		}
 	}
