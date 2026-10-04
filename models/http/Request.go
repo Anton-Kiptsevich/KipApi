@@ -1,9 +1,9 @@
-package models
+package http
 
-type HttpRequest struct {
+type Request struct {
 	Method  string
 	BaseUrl string
 	Path    string
-	Headers []HttpHeader
+	Headers []Header
 	Body    string
 }

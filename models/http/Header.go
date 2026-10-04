@@ -1,6 +1,6 @@
-package models
+package http
 
-type HttpHeader struct {
+type Header struct {
 	Name   string
 	Value  *string
 	Values []string

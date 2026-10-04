@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Anton-Kiptsevich/KipApi/models"
+	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 	"github.com/Anton-Kiptsevich/KipApi/utils"
 )
 
-func MakeHttpRequest(req *models.HttpRequest) (models.HttpResponse, error) {
+func MakeHttpRequest(req *hm.Request) (hm.Response, error) {
 	err := utils.ValidateHttpRequest(req)
 	if err != nil {
 		return returnHttpError(err)
@@ -53,7 +53,7 @@ func MakeHttpRequest(req *models.HttpRequest) (models.HttpResponse, error) {
 	if err != nil {
 		return returnHttpError(err)
 	}
-	res := models.HttpResponse{
+	res := hm.Response{
 		Status: hRes.Status,
 		Body: string(resBody),
 	}
@@ -61,6 +61,6 @@ func MakeHttpRequest(req *models.HttpRequest) (models.HttpResponse, error) {
 	return res, nil
 }
 
-func returnHttpError(err error) (models.HttpResponse, error) {
-	return models.HttpResponse{}, err
+func returnHttpError(err error) (hm.Response, error) {
+	return hm.Response{}, err
 }

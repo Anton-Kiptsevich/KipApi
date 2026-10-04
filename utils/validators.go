@@ -3,10 +3,10 @@ package utils
 import (
 	"fmt"
 
-	"github.com/Anton-Kiptsevich/KipApi/models"
+	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 )
 
-func ValidateHttpRequest(req *models.HttpRequest) error {
+func ValidateHttpRequest(req *hm.Request) error {
 	headers := make(map[string]struct{})
 	for _, h := range req.Headers {
 		_, ok := headers[h.Name]
