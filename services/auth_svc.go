@@ -64,7 +64,7 @@ func GetCredsForRequest(credsId string) (creds.Creds, error) {
 
 	oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
 	if !ok {
-		panic("Smth is wrong in GetCredsForRequest")
+		panic("Creds model/type discrepancy")
 	}
 
 	if !oauth2.ExpirationDate.Before(time.Now().Add(5 * time.Second)) {
@@ -86,7 +86,7 @@ func GetCredsForRequest(credsId string) (creds.Creds, error) {
 
 	oauth2, ok = currentCreds.Creds.(creds.OAuth2Creds)
 	if !ok {
-		panic("Smth is wrong in GetCredsForRequest")
+		panic("Creds model/type discrepancy")
 	}
 
 	if !oauth2.ExpirationDate.Before(time.Now().Add(5 * time.Second)) {
@@ -107,82 +107,10 @@ func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
 	if err != nil {
 		return req, err
 	}
-
-	switch req.AuthMethod {
-	case constants.AM_Basic:
-		for _, h := range req.Headers {
-			if strings.EqualFold(h.Name, "Authorization") {
-				return req, nil
-			}
-		}
-
-		basic, ok := currentCreds.Creds.(creds.BasicCreds)
-		if !ok || currentCreds.CredsType != constants.CT_Basic {
-			return req, fmt.Errorf("AuthMethod %s requires %s credentials", constants.AM_Basic, constants.CT_Basic)
-		}
-		encoded := base64.StdEncoding.EncodeToString([]byte(basic.Username + ":" + basic.Password))
-		authorization := "Basic " + encoded
-
-		headers := make([]hm.Header, 0, len(req.Headers)+1)
-		headers = append(headers, req.Headers...)
-		headers = append(headers, hm.Header{Name: "Authorization", Value: &authorization})
-		req.Headers = headers
-
-	case constants.AM_Bearer:
-		for _, h := range req.Headers {
-			if strings.EqualFold(h.Name, "Authorization") {
-				return req, nil
-			}
-		}
-
-		var token string
-		switch currentCreds.CredsType {
-		case constants.CT_Bearer:
-			bearer, ok := currentCreds.Creds.(creds.BearerCreds)
-			if !ok {
-				panic("Smth is wrong in InitAuthorizationHeaderIfNeeded")
-			}
-			token = bearer.Token
-		case constants.CT_OAuth2:
-			oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
-			if !ok {
-				panic("Smth is wrong in InitAuthorizationHeaderIfNeeded")
-			}
-			token = oauth2.AccessToken
-		default:
-			return req, fmt.Errorf("AuthMethod %s requires Bearer or OAuth2 credentials", constants.AM_Bearer)
-		}
-
-		authorization := "Bearer " + token
-		headers := make([]hm.Header, 0, len(req.Headers)+1)
-		headers = append(headers, req.Headers...)
-		headers = append(headers, hm.Header{Name: "Authorization", Value: &authorization})
-		req.Headers = headers
-
-	case constants.AM_Header:
+	if req.AuthMethod == constants.AM_Query {
 		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
- 		if !ok || currentCreds.CredsType != constants.CT_ApiKey {
-			return req, fmt.Errorf("AuthMethod %s requires %s credentials", constants.AM_Header, constants.CT_ApiKey)
-		}
-
-		for _, h := range req.Headers {
-			if strings.EqualFold(h.Name, apiKey.FieldName) {
-				return req, nil
-			}
-		}
-
-		headers := make([]hm.Header, 0, len(req.Headers)+1)
-		headers = append(headers, req.Headers...)
-		headers = append(headers, hm.Header{
-			Name:  apiKey.FieldName,
-			Value: &apiKey.ApiKey,
-		})
-		req.Headers = headers
-
-	case constants.AM_Query:
-		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
-		if !ok || currentCreds.CredsType != constants.CT_ApiKey {
-			return req, fmt.Errorf("AuthMethod %s requires %s credentials", constants.AM_Query, constants.CT_ApiKey)
+		if !ok {
+			panic("Auth Method/Creds Type discrepancy")
 		}
 
 		u, err := url.Parse(req.BaseUrl + req.Path)
@@ -196,7 +124,58 @@ func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
 			req.BaseUrl = u.Scheme + "://" + u.Host
 			req.Path = u.RequestURI()
 		}
+
+		return req, nil
 	}
+
+	headerName := "Authorization"
+	headerValue := ""
+
+	for _, h := range req.Headers {
+		if strings.EqualFold(h.Name, headerName) {
+			return req, nil
+		}
+	}
+	switch req.AuthMethod {
+	case constants.AM_Basic:
+		basic, ok := currentCreds.Creds.(creds.BasicCreds)
+		if !ok {
+			panic("Auth Method/Creds Type discrepancy")
+		}
+		headerValue = "Basic " + base64.StdEncoding.EncodeToString([]byte(basic.Username + ":" + basic.Password))
+
+	case constants.AM_Bearer:
+		var token string
+		switch currentCreds.CredsType {
+		case constants.CT_Bearer:
+			bearer, ok := currentCreds.Creds.(creds.BearerCreds)
+			if !ok {
+				panic("Auth Method/Creds Type discrepancy")
+			}
+			token = bearer.Token
+		case constants.CT_OAuth2:
+			oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
+			if !ok {
+				panic("Auth Method/Creds Type discrepancy")
+			}
+			token = oauth2.AccessToken
+		default:
+			panic("Auth Method/Creds Type discrepancy")
+		}
+		headerValue = "Bearer " + token
+
+	case constants.AM_Header:
+		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
+ 		if !ok {
+			panic("Auth Method/Creds Type discrepancy")
+		}
+		headerValue = apiKey.ApiKey
+	}
+
+	headers := make([]hm.Header, 0, len(req.Headers)+1)
+	headers = append(headers, req.Headers...)
+	headers = append(headers, hm.Header({Name: headerName, Value: &headerValue}))
+	req.Headers = headers
 
 	return req, nil
 }
