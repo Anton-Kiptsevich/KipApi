@@ -1,11 +1,13 @@
 package services
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/Anton-Kiptsevich/KipApi/constants"
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
+	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 	"github.com/Anton-Kiptsevich/KipApi/storage"
 	"github.com/Anton-Kiptsevich/KipApi/utils"
 )
@@ -43,11 +45,15 @@ func GetAllCreds() map[string]creds.Creds {
 	return credsStg.GetAllCreds()
 }
 
-func GetCredsById(credsId string) creds.Creds {
-	currentCreds := credsStg.GetCredsById(credsId)
+func GetCredsForRequest(req hm.Request) (creds.Creds, error) {
+	currentCreds, ok := credsStg.GetCredsById(req.CredsId)
+
+	if !ok {
+		return creds.Creds{}, fmt.Errorf("credentials with id %s not found", req.CredsId)
+	}
 
 	if currentCreds.CredsType != constants.CT_OAuth2 {
-		return currentCreds
+		return currentCreds, nil
 	}
 
 	oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
@@ -56,34 +62,35 @@ func GetCredsById(credsId string) creds.Creds {
 	}
 
 	if !oauth2.ExpirationDate.Before(time.Now().Add(5 * time.Second)) {
-		return currentCreds
+		return currentCreds, nil
 	}
 
 	tokenLocksMux.Lock()
-	mux, ok := tokenUpdateLocks[credsId]
+	mux, ok := tokenUpdateLocks[req.CredsId]
 	if !ok {
 		mux = &sync.Mutex{}
-		tokenUpdateLocks[credsId] = mux
+		tokenUpdateLocks[req.CredsId] = mux
 	}
 	tokenLocksMux.Unlock()
 
 	mux.Lock()
 	defer mux.Unlock()
 
-	currentCreds = credsStg.GetCredsById(credsId)
+	currentCreds, _ = credsStg.GetCredsById(req.CredsId)
 
 	oauth2, _ = currentCreds.Creds.(creds.OAuth2Creds)
 
 	if !oauth2.ExpirationDate.Before(time.Now().Add(5 * time.Second)) {
-		return currentCreds
+		return currentCreds, nil
 	}
 
-	refreshOAuthToken(currentCreds)
+	refreshOAuthToken(req, currentCreds)
 
-	return credsStg.GetCredsById(credsId)
+	currentCreds, _ = credsStg.GetCredsById(req.CredsId)
+	return currentCreds, nil
 }
 
-func refreshOAuthToken(creds creds.Creds) {
+func refreshOAuthToken(req hm.Request, creds creds.Creds) {
 
 	credsStg.SetCreds(creds.Id, creds)
 }

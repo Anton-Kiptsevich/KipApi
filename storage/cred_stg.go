@@ -26,11 +26,11 @@ func (cs *CredsStg) GetAllCreds() map[string]creds.Creds {
 	return result
 }
 
-func (cs *CredsStg) GetCredsById(credsId string) creds.Creds {
+func (cs *CredsStg) GetCredsById(credsId string) (creds.Creds, bool) {
 	cs.credsMux.RLock()
 	defer cs.credsMux.RUnlock()
-
-	return cs.credsStg[credsId]
+	c, ok := cs.credsStg[credsId]
+	return c, ok
 }
 
 func (cs *CredsStg) SetCreds(credsId string, creds creds.Creds) {
