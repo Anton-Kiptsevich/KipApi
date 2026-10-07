@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -98,6 +99,56 @@ func GetCredsForRequest(credsId string) (creds.Creds, error) {
 
 	currentCreds, _ = credsStg.GetCredsById(credsId)
 	return currentCreds, nil
+}
+
+
+func InitAuthorizationHeaderIfNeeded(req *hm.Request) error {
+	for _, h := range req.Headers {
+		if strings.EqualFold(h.Name, "Authorization") {
+			return nil
+		}
+	}
+
+	currentCreds, err := GetCredsForRequest(req.CredsId)
+	if err != nil {
+		return err
+	}
+
+	var authorization string
+
+	switch currentCreds.CredsType {
+	case constants.CT_Basic:
+		basic, ok := currentCreds.Creds.(creds.BasicCreds)
+		if !ok {
+			panic("Smth is wrong in InitAuthorizationHeaderIfNeeded")
+		}
+		encoded := base64.StdEncoding.EncodeToString([]byte(basic.Username + ":" + basic.Password))
+		authorization = "Basic " + encoded
+
+	case constants.CT_Bearer:
+		bearer, ok := currentCreds.Creds.(creds.BearerCreds)
+		if !ok {
+			panic("Smth is wrong in InitAuthorizationHeaderIfNeeded")
+		}
+		authorization = "Bearer " + bearer.Token
+
+	case constants.CT_OAuth2:
+		oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
+		if !ok {
+			panic("Smth is wrong in InitAuthorizationHeaderIfNeeded")
+		}
+		authorization = "Bearer " + oauth2.AccessToken
+
+	default:
+		return fmt.Errorf("unknown CredsType %s", currentCreds.CredsType)
+	}
+
+	req.Headers = append(req.Headers, hm.Header{
+		Name:  "Authorization",
+		Value: &authorization,
+	})
+
+	return nil
 }
 
 func refreshOAuthToken(currentCreds creds.Creds) error {
