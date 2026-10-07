@@ -31,14 +31,14 @@ func InitCredsSvc() {
 	tokenLocksMux.Unlock()
 }
 
-func SetCreds(credsList []creds.Creds) []error {
+func SetCreds(credsList []creds.Creds, markAsDirty bool) []error {
 	errors := make([]error, 0)
 	for _, c := range credsList {
 		validationError := utils.ValidateCreds(c.Id, c)
 		if validationError != nil {
 			errors = append(errors, validationError)
 		} else {
-			credsStg.SetCreds(c.Id, c)
+			credsStg.SetCreds(c.Id, c, markAsDirty)
 		}
 	}
 	if len(errors) > 0 {
@@ -47,13 +47,13 @@ func SetCreds(credsList []creds.Creds) []error {
 	return nil
 }
 
-func GetCredsForSync() map[string]creds.CredsState {
+func GetCredsForSync() map[string]creds.Creds {
 	return credsStg.GetCredsForSync()
 }
 
-func MarkCredsSynced(credsId string, syncedAt time.Time) error {
-	if !credsStg.MarkCredsSynced(credsId, syncedAt) {
-		return fmt.Errorf("credentials with id %s were updated after the provided sync timestamp", credsId)
+func MarkCredsSynced(credsId string) error {
+	if !credsStg.MarkCredsSynced(credsId) {
+		return fmt.Errorf("credentials with id %s not found", credsId)
 	}
 	return nil
 }
@@ -259,7 +259,7 @@ func refreshOAuthToken(currentCreds creds.Creds) error {
 		CredsType: currentCreds.CredsType,
 		Creds:     oauth2,
 	}
-	credsStg.UpdateCreds(currentCreds.Id, updatedCreds)
+	credsStg.SetCreds(currentCreds.Id, updatedCreds, true)
 
 	return nil
 }
