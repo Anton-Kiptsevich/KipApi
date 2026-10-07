@@ -3,6 +3,7 @@ package services
 import (
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 	"github.com/Anton-Kiptsevich/KipApi/storage"
+	"github.com/Anton-Kiptsevich/KipApi/utils"
 )
 
 var (
@@ -13,10 +14,20 @@ func InitCredsStg() {
 	credsStg = credsStg.InitCredsStg()
 }
 
-func SetCreds(credsList []creds.Creds) {
+func SetCreds(credsList []creds.Creds) []error {
+	errors := make([]error, 0)
 	for _, c := range credsList {
-		credsStg.SetCreds(c.Id, c)
+		validationError := utils.ValidateCreds(c)
+		if (validationError != nil) {
+			errors = append(errors, validationError)
+		} else {
+			credsStg.SetCreds(c.Id, c)
+		}
 	}
+	if len(errors) > 0 {
+		return errors
+	}
+	return nil
 }
 
 func GetAllCreds() map[string]creds.Creds {
