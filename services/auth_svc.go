@@ -159,10 +159,10 @@ func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
 		headers = append(headers, hm.Header{Name: "Authorization", Value: &authorization})
 		req.Headers = headers
 
-	case constants.AM_ApiKeyHeader:
+	case constants.AM_Header:
 		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
-		if !ok || currentCreds.CredsType != constants.CT_ApiKey {
-			return req, fmt.Errorf("AuthMethod %s requires %s credentials", constants.AM_ApiKeyHeader, constants.CT_ApiKey)
+ 		if !ok || currentCreds.CredsType != constants.CT_ApiKey {
+			return req, fmt.Errorf("AuthMethod %s requires %s credentials", constants.AM_Header, constants.CT_ApiKey)
 		}
 
 		for _, h := range req.Headers {
@@ -179,10 +179,10 @@ func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
 		})
 		req.Headers = headers
 
-	case constants.AM_ApiKeyQuery:
+	case constants.AM_Query:
 		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
 		if !ok || currentCreds.CredsType != constants.CT_ApiKey {
-			return req, fmt.Errorf("AuthMethod %s requires %s credentials", constants.AM_ApiKeyQuery, constants.CT_ApiKey)
+			return req, fmt.Errorf("AuthMethod %s requires %s credentials", constants.AM_Query, constants.CT_ApiKey)
 		}
 
 		u, err := url.Parse(req.BaseUrl + req.Path)
