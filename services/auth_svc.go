@@ -11,7 +11,6 @@ import (
 	"github.com/Anton-Kiptsevich/KipApi/constants"
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
-	"github.com/Anton-Kiptsevich/KipApi/services/authservices"
 	"github.com/Anton-Kiptsevich/KipApi/storage"
 	"github.com/Anton-Kiptsevich/KipApi/utils"
 )
@@ -98,7 +97,7 @@ func GetCredsForRequest(credsId string) (creds.Creds, error) {
 		return currentCreds, nil
 	}
 
-	updatedCreds, err := authservices.RefreshOAuthToken(currentCreds, MakeHttpRequest)
+	updatedCreds, err := refreshOAuthToken(currentCreds)
 	if err != nil {
 		return creds.Creds{}, err
 	}
@@ -126,8 +125,8 @@ func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
 		if _, exists := q[apiKey.FieldName]; !exists {
 			q.Set(apiKey.FieldName, apiKey.ApiKey)
 			u.RawQuery = q.Encode()
-		req.BaseUrl = u.Scheme + "://" + u.Host
-		req.Path = u.RequestURI()
+			req.BaseUrl = u.Scheme + "://" + u.Host
+			req.Path = u.RequestURI()
 		}
 
 		return req, nil
