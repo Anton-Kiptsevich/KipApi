@@ -18,7 +18,7 @@ func SetCreds(credsList []creds.Creds) []error {
 	errors := make([]error, 0)
 	for _, c := range credsList {
 		validationError := utils.ValidateCreds(c)
-		if (validationError != nil) {
+		if validationError != nil {
 			errors = append(errors, validationError)
 		} else {
 			credsStg.SetCreds(c.Id, c)

@@ -24,37 +24,37 @@ func ValidateHttpRequest(req *hm.Request) error {
 	return nil
 }
 
-func ValidateCreds(c creds.Creds) error {
+func ValidateCreds(id string, c creds.Creds) error {
 	switch c.CredsType {
 	case constants.CT_Basic:
 		basic, ok := c.Creds.(creds.BasicCreds)
 		if !ok {
-			return fmt.Errorf("CredsType %s requires BasicCreds", c.CredsType)
+			return fmt.Errorf("%s: CredsType %s requires BasicCreds", id, c.CredsType)
 		}
 		if basic.Username == "" || basic.Password == "" {
-			return fmt.Errorf("BasicCreds must contain Username and Password")
+			return fmt.Errorf("%s: BasicCreds must contain Username and Password", id)
 		}
 	case constants.CT_Bearer:
 		bearer, ok := c.Creds.(creds.BearerCreds)
 		if !ok {
-			return fmt.Errorf("CredsType %s requires BearerCreds", c.CredsType)
+			return fmt.Errorf("%s: CredsType %s requires BearerCreds", id, c.CredsType)
 		}
 		if bearer.Token == "" {
-			return fmt.Errorf("BearerCreds must contain Token")
+			return fmt.Errorf("%s: BearerCreds must contain Token", id)
 		}
 	case constants.CT_OAuth2:
 		oauth2, ok := c.Creds.(creds.OAuth2Creds)
 		if !ok {
-			return fmt.Errorf("CredsType %s requires OAuth2Creds", c.CredsType)
+			return fmt.Errorf("%s: CredsType %s requires OAuth2Creds", id, c.CredsType)
 		}
 		if oauth2.AccessToken == "" || oauth2.RefreshToken == "" {
-			return fmt.Errorf("OAuth2Creds must contain AccessToken and RefreshToken")
+			return fmt.Errorf("%s: OAuth2Creds must contain AccessToken and RefreshToken", id)
 		}
 		if oauth2.ExpirationDate.IsZero() {
-			return fmt.Errorf("OAuth2Creds must contain ExpirationDate")
+			return fmt.Errorf("%s: OAuth2Creds must contain ExpirationDate", id)
 		}
 	default:
-		return fmt.Errorf("Unknown CredsType %s", c.CredsType)
+		return fmt.Errorf("%s: Unknown CredsType %s", id, c.CredsType)
 	}
 
 	return nil
