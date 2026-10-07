@@ -14,18 +14,17 @@ func MakeHttpRequest(req *hm.Request) (hm.Response, error) {
 	if err != nil {
 		return returnHttpError(err)
 	}
+
 	var body io.Reader
-	var hReq *http.Request
 	if req.Body != "" {
 		body = strings.NewReader(req.Body)
 	}
-	
-	hReq, err = http.NewRequest(
+
+	hReq, err := http.NewRequest(
 		req.Method,
-		req.BaseUrl + req.Path,
+		req.BaseUrl+req.Path,
 		body,
 	)
-	
 	if err != nil {
 		return returnHttpError(err)
 	}
@@ -48,14 +47,22 @@ func MakeHttpRequest(req *hm.Request) (hm.Response, error) {
 		return returnHttpError(err)
 	}
 	defer hRes.Body.Close()
-	
+
 	resBody, err := io.ReadAll(hRes.Body)
 	if err != nil {
 		return returnHttpError(err)
 	}
+
 	res := hm.Response{
 		Status: hRes.Status,
-		Body: string(resBody),
+		Body:   string(resBody),
+	}
+
+	for name, values := range hRes.Header {
+		for _, value := range values {
+			valueCopy := value
+			res.Headers = append(res.Headers, hm.Header{Name: name, Value: &valueCopy})
+		}
 	}
 
 	return res, nil
