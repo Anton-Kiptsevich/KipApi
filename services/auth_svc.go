@@ -2,11 +2,8 @@ package services
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +11,7 @@ import (
 	"github.com/Anton-Kiptsevich/KipApi/constants"
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
+	"github.com/Anton-Kiptsevich/KipApi/services/authservices"
 	"github.com/Anton-Kiptsevich/KipApi/storage"
 	"github.com/Anton-Kiptsevich/KipApi/utils"
 )
@@ -100,12 +98,13 @@ func GetCredsForRequest(credsId string) (creds.Creds, error) {
 		return currentCreds, nil
 	}
 
-	if err := refreshOAuthToken(currentCreds); err != nil {
+	updatedCreds, err := authservices.RefreshOAuthToken(currentCreds, MakeHttpRequest)
+	if err != nil {
 		return creds.Creds{}, err
 	}
 
-	currentCreds, _ = credsStg.GetCredsById(credsId)
-	return currentCreds, nil
+	credsStg.SetCreds(currentCreds.Id, updatedCreds, true)
+	return updatedCreds, nil
 }
 
 func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
@@ -127,8 +126,8 @@ func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
 		if _, exists := q[apiKey.FieldName]; !exists {
 			q.Set(apiKey.FieldName, apiKey.ApiKey)
 			u.RawQuery = q.Encode()
-			req.BaseUrl = u.Scheme + "://" + u.Host
-			req.Path = u.RequestURI()
+		req.BaseUrl = u.Scheme + "://" + u.Host
+		req.Path = u.RequestURI()
 		}
 
 		return req, nil
@@ -184,82 +183,4 @@ func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
 	req.Headers = headers
 
 	return req, nil
-}
-
-func refreshOAuthToken(currentCreds creds.Creds) error {
-	oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
-	if !ok {
-		panic("Smth is wrong in refreshOAuthToken")
-	}
-
-	form := url.Values{}
-	form.Set("grant_type", "refresh_token")
-	form.Set("refresh_token", oauth2.RefreshToken)
-	form.Set("client_id", oauth2.ClientID)
-	form.Set("client_secret", oauth2.ClientSecret)
-	contentType := "application/x-www-form-urlencoded"
-
-	req := hm.Request{
-		Method:  http.MethodPost,
-		BaseUrl: oauth2.TokenURL,
-		Headers: []hm.Header{{
-			Name:  "Content-Type",
-			Value: &contentType,
-		}},
-		Body: form.Encode(),
-	}
-
-	res, err := MakeHttpRequest(&req)
-	if err != nil {
-		return fmt.Errorf("failed to refresh OAuth2 token: %w", err)
-	}
-
-	statusParts := strings.Fields(res.Status)
-	if len(statusParts) == 0 {
-		return fmt.Errorf("OAuth2 token refresh returned empty response status")
-	}
-
-	statusCode, err := strconv.Atoi(statusParts[0])
-	if err != nil {
-		return fmt.Errorf("failed to parse OAuth2 token response status %q: %w", res.Status, err)
-	}
-
-	if statusCode < 200 || statusCode >= 300 {
-		return fmt.Errorf("OAuth2 token refresh failed with status %s: %s", res.Status, res.Body)
-	}
-
-	var tokenResponse struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresIn    int64  `json:"expires_in"`
-	}
-
-	if err := json.Unmarshal([]byte(res.Body), &tokenResponse); err != nil {
-		return fmt.Errorf("failed to parse OAuth2 token response: %w", err)
-	}
-
-	if tokenResponse.AccessToken == "" {
-		return fmt.Errorf("OAuth2 token response does not contain access_token")
-	}
-
-	if tokenResponse.ExpiresIn <= 0 {
-		return fmt.Errorf("OAuth2 token response does not contain valid expires_in")
-	}
-
-	if tokenResponse.RefreshToken == "" {
-		tokenResponse.RefreshToken = oauth2.RefreshToken
-	}
-
-	oauth2.AccessToken = tokenResponse.AccessToken
-	oauth2.RefreshToken = tokenResponse.RefreshToken
-	oauth2.ExpirationDate = time.Now().Add(time.Duration(tokenResponse.ExpiresIn) * time.Second)
-
-	updatedCreds := creds.Creds{
-		Id:        currentCreds.Id,
-		CredsType: currentCreds.CredsType,
-		Creds:     oauth2,
-	}
-	credsStg.SetCreds(currentCreds.Id, updatedCreds, true)
-
-	return nil
 }
