@@ -103,53 +103,100 @@ func GetCredsForRequest(credsId string) (creds.Creds, error) {
 
 
 func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
-	for _, h := range req.Headers {
-		if strings.EqualFold(h.Name, "Authorization") {
-			return req, nil
-		}
-	}
-
 	currentCreds, err := GetCredsForRequest(req.CredsId)
 	if err != nil {
 		return req, err
 	}
 
-	var authorization string
+	switch req.AuthMethod {
+	case constants.AM_Basic:
+		for _, h := range req.Headers {
+			if strings.EqualFold(h.Name, "Authorization") {
+				return req, nil
+			}
+		}
 
-	switch currentCreds.CredsType {
-	case constants.CT_Basic:
 		basic, ok := currentCreds.Creds.(creds.BasicCreds)
-		if !ok {
-			panic("Smth is wrong in InitAuthorizationHeaderIfNeeded")
+		if !ok || currentCreds.CredsType != constants.CT_Basic {
+			return req, fmt.Errorf("AuthMethod %s requires %s credentials", constants.AM_Basic, constants.CT_Basic)
 		}
 		encoded := base64.StdEncoding.EncodeToString([]byte(basic.Username + ":" + basic.Password))
-		authorization = "Basic " + encoded
+		authorization := "Basic " + encoded
 
-	case constants.CT_Bearer:
-		bearer, ok := currentCreds.Creds.(creds.BearerCreds)
-		if !ok {
-			panic("Smth is wrong in InitAuthorizationHeaderIfNeeded")
+		headers := make([]hm.Header, 0, len(req.Headers)+1)
+		headers = append(headers, req.Headers...)
+		headers = append(headers, hm.Header{Name: "Authorization", Value: &authorization})
+		req.Headers = headers
+
+	case constants.AM_Bearer:
+		for _, h := range req.Headers {
+			if strings.EqualFold(h.Name, "Authorization") {
+				return req, nil
+			}
 		}
-		authorization = "Bearer " + bearer.Token
 
-	case constants.CT_OAuth2:
-		oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
-		if !ok {
-			panic("Smth is wrong in InitAuthorizationHeaderIfNeeded")
+		var token string
+		switch currentCreds.CredsType {
+		case constants.CT_Bearer:
+			bearer, ok := currentCreds.Creds.(creds.BearerCreds)
+			if !ok {
+				panic("Smth is wrong in InitAuthorizationHeaderIfNeeded")
+			}
+			token = bearer.Token
+		case constants.CT_OAuth2:
+			oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
+			if !ok {
+				panic("Smth is wrong in InitAuthorizationHeaderIfNeeded")
+			}
+			token = oauth2.AccessToken
+		default:
+			return req, fmt.Errorf("AuthMethod %s requires Bearer or OAuth2 credentials", constants.AM_Bearer)
 		}
-		authorization = "Bearer " + oauth2.AccessToken
 
-	default:
-		return req, fmt.Errorf("unknown CredsType %s", currentCreds.CredsType)
+		authorization := "Bearer " + token
+		headers := make([]hm.Header, 0, len(req.Headers)+1)
+		headers = append(headers, req.Headers...)
+		headers = append(headers, hm.Header{Name: "Authorization", Value: &authorization})
+		req.Headers = headers
+
+	case constants.AM_ApiKeyHeader:
+		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
+		if !ok || currentCreds.CredsType != constants.CT_ApiKey {
+			return req, fmt.Errorf("AuthMethod %s requires %s credentials", constants.AM_ApiKeyHeader, constants.CT_ApiKey)
+		}
+
+		for _, h := range req.Headers {
+			if strings.EqualFold(h.Name, apiKey.FieldName) {
+				return req, nil
+			}
+		}
+
+		headers := make([]hm.Header, 0, len(req.Headers)+1)
+		headers = append(headers, req.Headers...)
+		headers = append(headers, hm.Header{
+			Name:  apiKey.FieldName,
+			Value: &apiKey.ApiKey,
+		})
+		req.Headers = headers
+
+	case constants.AM_ApiKeyQuery:
+		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
+		if !ok || currentCreds.CredsType != constants.CT_ApiKey {
+			return req, fmt.Errorf("AuthMethod %s requires %s credentials", constants.AM_ApiKeyQuery, constants.CT_ApiKey)
+		}
+
+		u, err := url.Parse(req.BaseUrl + req.Path)
+		if err != nil {
+			return req, err
+		}
+		q := u.Query()
+		if _, exists := q[apiKey.FieldName]; !exists {
+			q.Set(apiKey.FieldName, apiKey.ApiKey)
+			u.RawQuery = q.Encode()
+			req.BaseUrl = u.Scheme + "://" + u.Host
+			req.Path = u.RequestURI()
+		}
 	}
-
-	headers := make([]hm.Header, 0, len(req.Headers)+1)
-	headers = append(headers, req.Headers...)
-	headers = append(headers, hm.Header{
-		Name:  "Authorization",
-		Value: &authorization,
-	})
-	req.Headers = headers
 
 	return req, nil
 }
