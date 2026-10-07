@@ -1,4 +1,4 @@
-package authservices
+package services
 
 import (
 	"encoding/json"
@@ -19,7 +19,7 @@ type tokenResponse struct {
 	ExpiresIn    int64  `json:"expires_in"`
 }
 
-func RefreshOAuthToken(currentCreds creds.Creds, makeHttpCall func(*hm.Request) (hm.Response, error)) (creds.Creds, error) {
+func refreshOAuthToken(currentCreds creds.Creds) (creds.Creds, error) {
 	oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
 	if !ok {
 		return creds.Creds{}, fmt.Errorf("credentials with id %s are not OAuth2 credentials", currentCreds.Id)
@@ -31,7 +31,7 @@ func RefreshOAuthToken(currentCreds creds.Creds, makeHttpCall func(*hm.Request) 
 	form.Set("client_id", oauth2.ClientID)
 	form.Set("client_secret", oauth2.ClientSecret)
 
-	res, err := makeOAuthTokenRequest(oauth2.TokenURL, form, makeHttpCall)
+	res, err := makeOAuthTokenRequest(oauth2.TokenURL, form)
 	if err != nil {
 		return creds.Creds{}, fmt.Errorf("failed to refresh OAuth2 token: %w", err)
 	}
@@ -56,41 +56,41 @@ func RefreshOAuthToken(currentCreds creds.Creds, makeHttpCall func(*hm.Request) 
 	}, nil
 }
 
-func GetOAuthTokenByPassword(currentCreds creds.Creds, username, password string, makeHttpCall func(*hm.Request) (hm.Response, error)) (creds.Creds, error) {
-	oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
-	if !ok {
-		return creds.Creds{}, fmt.Errorf("credentials with id %s are not OAuth2 credentials", currentCreds.Id)
-	}
-
+func GetOAuthTokenByPassword(
+	tokenURL string,
+	clientID string,
+	clientSecret string,
+	username string,
+	password string,
+) (creds.OAuth2Creds, error) {
 	form := url.Values{}
 	form.Set("grant_type", "password")
 	form.Set("username", username)
 	form.Set("password", password)
-	form.Set("client_id", oauth2.ClientID)
-	form.Set("client_secret", oauth2.ClientSecret)
+	form.Set("client_id", clientID)
+	form.Set("client_secret", clientSecret)
 
-	res, err := makeOAuthTokenRequest(oauth2.TokenURL, form, makeHttpCall)
+	res, err := makeOAuthTokenRequest(tokenURL, form)
 	if err != nil {
-		return creds.Creds{}, fmt.Errorf("failed to get OAuth2 token: %w", err)
+		return creds.OAuth2Creds{}, fmt.Errorf("failed to get OAuth2 token: %w", err)
 	}
 
 	parsed, err := parseTokenResponse(res, "OAuth2 token request")
 	if err != nil {
-		return creds.Creds{}, err
+		return creds.OAuth2Creds{}, err
 	}
 
-	oauth2.AccessToken = parsed.AccessToken
-	oauth2.RefreshToken = parsed.RefreshToken
-	oauth2.ExpirationDate = time.Now().Add(time.Duration(parsed.ExpiresIn) * time.Second)
-
-	return creds.Creds{
-		Id:        currentCreds.Id,
-		CredsType: currentCreds.CredsType,
-		Creds:     oauth2,
+	return creds.OAuth2Creds{
+		AccessToken:    parsed.AccessToken,
+		RefreshToken:   parsed.RefreshToken,
+		ExpirationDate: time.Now().Add(time.Duration(parsed.ExpiresIn) * time.Second),
+		TokenURL:       tokenURL,
+		ClientID:       clientID,
+		ClientSecret:   clientSecret,
 	}, nil
 }
 
-func makeOAuthTokenRequest(tokenURL string, form url.Values, makeHttpCall func(*hm.Request) (hm.Response, error)) (hm.Response, error) {
+func makeOAuthTokenRequest(tokenURL string, form url.Values) (hm.Response, error) {
 	contentType := "application/x-www-form-urlencoded"
 	req := hm.Request{
 		Method:  http.MethodPost,
@@ -102,7 +102,7 @@ func makeOAuthTokenRequest(tokenURL string, form url.Values, makeHttpCall func(*
 		Body: form.Encode(),
 	}
 
-	return makeHttpCall(&req)
+	return MakeHttpRequest(&req)
 }
 
 func parseTokenResponse(res hm.Response, operation string) (tokenResponse, error) {
