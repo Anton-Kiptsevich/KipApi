@@ -41,8 +41,12 @@ func getDigestAuthorization(req hm.Request, currentCreds creds.Creds) (string, e
 	}
 
 	uri := req.Path
-	if uri == "" { uri = "/" }
-	if parsed, err := url.Parse(req.BaseUrl + req.Path); err == nil { uri = parsed.RequestURI() }
+	if uri == "" {
+		uri = "/"
+	}
+	if parsed, err := url.Parse(req.BaseUrl + req.Path); err == nil {
+		uri = parsed.RequestURI()
+	}
 
 	ha1 := md5Hex(digestCreds.Username + ":" + challenge.Realm + ":" + digestCreds.Password)
 	ha2 := md5Hex(req.Method + ":" + uri)
@@ -53,31 +57,46 @@ func getDigestAuthorization(req hm.Request, currentCreds creds.Creds) (string, e
 	}
 
 	cnonce, err := generateCnonce()
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	nc := "00000001"
 	response := md5Hex(ha1 + ":" + challenge.Nonce + ":" + nc + ":" + cnonce + ":auth:" + ha2)
 	authorization := "Digest username=\"" + digestCreds.Username + "\", realm=\"" + challenge.Realm + "\", nonce=\"" + challenge.Nonce + "\", uri=\"" + uri + "\", algorithm=MD5, qop=auth, nc=" + nc + ", cnonce=\"" + cnonce + "\", response=\"" + response + "\""
-	if challenge.Opaque != "" { authorization += ", opaque=\"" + challenge.Opaque + "\"" }
+	if challenge.Opaque != "" {
+		authorization += ", opaque=\"" + challenge.Opaque + "\""
+	}
 	return authorization, nil
 }
 
 type digestChallenge struct {
-	Realm string
-	Nonce string
+	Realm     string
+	Nonce     string
 	Algorithm string
-	Qop string
-	Opaque string
+	Qop       string
+	Opaque    string
 }
 
 func getDigestChallenge(headers []hm.Header) (digestChallenge, error) {
 	for _, header := range headers {
-		if !strings.EqualFold(header.Name, "WWW-Authenticate") || header.Value == nil { continue }
+		if !strings.EqualFold(header.Name, "WWW-Authenticate") || header.Value == nil {
+			continue
+		}
 		value := strings.TrimSpace(*header.Value)
-		if !strings.HasPrefix(strings.ToLower(value), "digest ") { continue }
+		if !strings.HasPrefix(strings.ToLower(value), "digest ") {
+			continue
+		}
 		params, err := parseDigestParams(strings.TrimSpace(value[len("Digest "):]))
-		if err != nil { return digestChallenge{}, err }
-		challenge := digestChallenge{Realm: params["realm"], Nonce: params["nonce"], Algorithm: params["algorithm"], Qop: params["qop"], Opaque: params["opaque"]}
-		if challenge.Realm == "" || challenge.Nonce == "" { return digestChallenge{}, fmt.Errorf("Digest challenge must contain realm and nonce") }
+		if err != nil {
+			return digestChallenge{}, err
+		}
+		challenge := digestChallenge{
+			Realm: params["realm"], Nonce: params["nonce"], Algorithm: params["algorithm"],
+			Qop: params["qop"], Opaque: params["opaque"],
+		}
+		if challenge.Realm == "" || challenge.Nonce == "" {
+			return digestChallenge{}, fmt.Errorf("Digest challenge must contain realm and nonce")
+		}
 		return challenge, nil
 	}
 	return digestChallenge{}, fmt.Errorf("Digest challenge was not found in WWW-Authenticate")
@@ -87,24 +106,39 @@ func parseDigestParams(value string) (map[string]string, error) {
 	result := make(map[string]string)
 	for {
 		value = strings.TrimSpace(value)
-		if value == "" { return result, nil }
+		if value == "" {
+			return result, nil
+		}
 		eq := strings.IndexByte(value, '=')
-		if eq <= 0 { return nil, fmt.Errorf("invalid Digest parameter %q", value) }
+		if eq <= 0 {
+			return nil, fmt.Errorf("invalid Digest parameter %q", value)
+		}
 		name := strings.TrimSpace(value[:eq])
 		value = strings.TrimSpace(value[eq+1:])
+
 		var parameter string
 		if strings.HasPrefix(value, "\"") {
 			end := 1
 			for end < len(value) {
-				if value[end] == '"' && value[end-1] != '\\' { break }
+				if value[end] == '"' && value[end-1] != '\\' {
+					break
+				}
 				end++
 			}
-			if end >= len(value) { return nil, fmt.Errorf("unterminated Digest parameter %s", name) }
+			if end >= len(value) {
+				return nil, fmt.Errorf("unterminated Digest parameter %s", name)
+			}
 			parameter = value[1:end]
 			value = value[end+1:]
 		} else {
 			comma := strings.IndexByte(value, ',')
-			if comma == -1 { parameter = strings.TrimSpace(value); value = "" } else { parameter = strings.TrimSpace(value[:comma]); value = value[comma+1:] }
+			if comma == -1 {
+				parameter = strings.TrimSpace(value)
+				value = ""
+			} else {
+				parameter = strings.TrimSpace(value[:comma])
+				value = value[comma+1:]
+			}
 		}
 		result[strings.ToLower(name)] = parameter
 	}
@@ -117,11 +151,27 @@ func md5Hex(value string) string {
 
 func generateCnonce() (string, error) {
 	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil { return "", err }
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
 	return hex.EncodeToString(b), nil
 }
 
 func containsToken(value, token string) bool {
-	for _, item := range strings.Split(value, ",") { if strings.EqualFold(strings.TrimSpace(item), token) { return true } }
+	for _, item := range strings.Split(value, ",") {
+		if strings.EqualFold(strings.TrimSpace(item), token) {
+			return true
+		}
+	}
 	return false
+}
+
+func removeHeader(headers []hm.Header, name string) []hm.Header {
+	result := make([]hm.Header, 0, len(headers))
+	for _, header := range headers {
+		if !strings.EqualFold(header.Name, name) {
+			result = append(result, header)
+		}
+	}
+	return result
 }
