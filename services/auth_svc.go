@@ -102,16 +102,16 @@ func GetCredsForRequest(credsId string) (creds.Creds, error) {
 }
 
 
-func InitAuthorizationHeaderIfNeeded(req *hm.Request) error {
+func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
 	for _, h := range req.Headers {
 		if strings.EqualFold(h.Name, "Authorization") {
-			return nil
+			return req, nil
 		}
 	}
 
 	currentCreds, err := GetCredsForRequest(req.CredsId)
 	if err != nil {
-		return err
+		return req, err
 	}
 
 	var authorization string
@@ -140,15 +140,18 @@ func InitAuthorizationHeaderIfNeeded(req *hm.Request) error {
 		authorization = "Bearer " + oauth2.AccessToken
 
 	default:
-		return fmt.Errorf("unknown CredsType %s", currentCreds.CredsType)
+		return req, fmt.Errorf("unknown CredsType %s", currentCreds.CredsType)
 	}
 
-	req.Headers = append(req.Headers, hm.Header{
+	headers := make([]hm.Header, 0, len(req.Headers)+1)
+	headers = append(headers, req.Headers...)
+	headers = append(headers, hm.Header{
 		Name:  "Authorization",
 		Value: &authorization,
 	})
+	req.Headers = headers
 
-	return nil
+	return req, nil
 }
 
 func refreshOAuthToken(currentCreds creds.Creds) error {
