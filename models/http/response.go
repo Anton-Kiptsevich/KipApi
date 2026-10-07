@@ -1,6 +1,7 @@
 package http
 
 type Response struct {
-	Status string
-	Body   string
+	Status  string
+	Headers []Header
+	Body    string
 }
