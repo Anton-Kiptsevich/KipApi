@@ -37,3 +37,7 @@ func GetAllCreds() map[string]creds.Creds {
 func GetCredsById(credsId string) creds.Creds {
 	return credsStg.GetCredsById(credsId)
 }
+
+func refreshOAuthToken() {
+
+}
