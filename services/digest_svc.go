@@ -141,6 +141,7 @@ func parseDigestParams(value string) (map[string]string, error) {
 			}
 		}
 		result[strings.ToLower(name)] = parameter
+		value = strings.TrimPrefix(strings.TrimSpace(value), ",")
 	}
 }
 
