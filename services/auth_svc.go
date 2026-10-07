@@ -140,6 +140,7 @@ func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
 			return req, nil
 		}
 	}
+
 	switch req.AuthMethod {
 	case constants.AM_Basic:
 		basic, ok := currentCreds.Creds.(creds.BasicCreds)
@@ -174,6 +175,12 @@ func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
 			panic("Auth Method/Creds Type discrepancy")
 		}
 		headerValue = apiKey.ApiKey
+
+	case constants.AM_Digest:
+		headerValue, err = getDigestAuthorization(req, currentCreds)
+		if err != nil {
+			return req, err
+		}
 	}
 
 	headers := make([]hm.Header, 0, len(req.Headers)+1)
