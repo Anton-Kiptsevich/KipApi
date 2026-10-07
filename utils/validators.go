@@ -53,9 +53,6 @@ func ValidateCreds(c creds.Creds) error {
 		if oauth2.ExpirationDate.IsZero() {
 			return fmt.Errorf("OAuth2Creds must contain ExpirationDate")
 		}
-		if oauth2.TokenURL == "" || oauth2.ClientID == "" || oauth2.ClientSecret == "" {
-			return fmt.Errorf("OAuth2Creds must contain TokenURL, ClientID and ClientSecret")
-		}
 	default:
 		return fmt.Errorf("Unknown CredsType %s", c.CredsType)
 	}
