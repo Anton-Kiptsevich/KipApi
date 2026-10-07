@@ -2,8 +2,22 @@ package storage
 
 import "github.com/Anton-Kiptsevich/KipApi/models/creds"
 
-var credsStg = make(map[string]creds.Creds)
+type CredsStg struct {
+	credsStg map[string]creds.Creds
+}
 
-func getAllCreds() map[string]creds.Creds {
-	return credsStg
+func (cs *CredsStg) InitCredsStg() CredsStg {
+	return CredsStg{ credsStg : make(map[string]creds.Creds) }
+}
+
+func (cs *CredsStg) GetAllCreds() map[string]creds.Creds {
+	return cs.credsStg
+}
+
+func (cs *CredsStg) GetCredsById(credsId string) creds.Creds {
+	return cs.credsStg[credsId]
+}
+
+func (cs *CredsStg) SetCreds(credsId string, creds creds.Creds) {
+	cs.credsStg[credsId] = creds
 }
