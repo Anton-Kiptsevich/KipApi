@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -32,7 +33,7 @@ func InitCredsSvc() {
 func SetCreds(credsList []creds.Creds) []error {
 	errors := make([]error, 0)
 	for _, c := range credsList {
-		validationError := utils.ValidateCreds(c)
+		validationError := utils.ValidateCreds(c.Id, c)
 		if validationError != nil {
 			errors = append(errors, validationError)
 		} else {
@@ -49,11 +50,11 @@ func GetAllCreds() map[string]creds.Creds {
 	return credsStg.GetAllCreds()
 }
 
-func GetCredsForRequest(req hm.Request) (creds.Creds, error) {
-	currentCreds, ok := credsStg.GetCredsById(req.CredsId)
+func GetCredsForRequest(credsId string) (creds.Creds, error) {
+	currentCreds, ok := credsStg.GetCredsById(credsId)
 
 	if !ok {
-		return creds.Creds{}, fmt.Errorf("credentials with id %s not found", req.CredsId)
+		return creds.Creds{}, fmt.Errorf("credentials with id %s not found", credsId)
 	}
 
 	if currentCreds.CredsType != constants.CT_OAuth2 {
@@ -62,7 +63,7 @@ func GetCredsForRequest(req hm.Request) (creds.Creds, error) {
 
 	oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
 	if !ok {
-		panic("Smth is wrong in GetCredsById")
+		panic("Smth is wrong in GetCredsForRequest")
 	}
 
 	if !oauth2.ExpirationDate.Before(time.Now().Add(5 * time.Second)) {
@@ -70,63 +71,55 @@ func GetCredsForRequest(req hm.Request) (creds.Creds, error) {
 	}
 
 	tokenLocksMux.Lock()
-	mux, ok := tokenUpdateLocks[req.CredsId]
+	mux, ok := tokenUpdateLocks[credsId]
 	if !ok {
 		mux = &sync.Mutex{}
-		tokenUpdateLocks[req.CredsId] = mux
+		tokenUpdateLocks[credsId] = mux
 	}
 	tokenLocksMux.Unlock()
 
 	mux.Lock()
 	defer mux.Unlock()
 
-	currentCreds, _ = credsStg.GetCredsById(req.CredsId)
+	currentCreds, _ = credsStg.GetCredsById(credsId)
 
-	oauth2, _ = currentCreds.Creds.(creds.OAuth2Creds)
+	oauth2, ok = currentCreds.Creds.(creds.OAuth2Creds)
+	if !ok {
+		panic("Smth is wrong in GetCredsForRequest")
+	}
 
 	if !oauth2.ExpirationDate.Before(time.Now().Add(5 * time.Second)) {
 		return currentCreds, nil
 	}
 
-	err := refreshOAuthToken(req, currentCreds)
-	if err != nil {
+	if err := refreshOAuthToken(currentCreds); err != nil {
 		return creds.Creds{}, err
 	}
 
-	currentCreds, _ = credsStg.GetCredsById(req.CredsId)
+	currentCreds, _ = credsStg.GetCredsById(credsId)
 	return currentCreds, nil
 }
 
-func refreshOAuthToken(req hm.Request, currentCreds creds.Creds) error {
+func refreshOAuthToken(currentCreds creds.Creds) error {
 	oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
 	if !ok {
 		panic("Smth is wrong in refreshOAuthToken")
 	}
 
-	form, err := url.ParseQuery(req.Body)
-	if err != nil {
-		return fmt.Errorf("failed to parse OAuth2 refresh request body: %w", err)
-	}
-
+	form := url.Values{}
 	form.Set("grant_type", "refresh_token")
 	form.Set("refresh_token", oauth2.RefreshToken)
+	form.Set("client_id", oauth2.ClientID)
+	form.Set("client_secret", oauth2.ClientSecret)
 
-	req.Body = form.Encode()
-
-	contentTypeSet := false
-	for _, h := range req.Headers {
-		if strings.EqualFold(h.Name, "Content-Type") {
-			contentTypeSet = true
-			break
-		}
-	}
-
-	if !contentTypeSet {
-		contentType := "application/x-www-form-urlencoded"
-		req.Headers = append(req.Headers, hm.Header{
+	req := hm.Request{
+		Method:  http.MethodPost,
+		BaseUrl: oauth2.TokenURL,
+		Headers: []hm.Header{{
 			Name:  "Content-Type",
-			Value: &contentType,
-		})
+			Value: stringPtr("application/x-www-form-urlencoded"),
+		}},
+		Body: form.Encode(),
 	}
 
 	res, err := MakeHttpRequest(&req)
@@ -181,4 +174,8 @@ func refreshOAuthToken(req hm.Request, currentCreds creds.Creds) error {
 	})
 
 	return nil
+}
+
+func stringPtr(s string) *string {
+	return &s
 }
