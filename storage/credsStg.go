@@ -15,7 +15,7 @@ func (cs *CredsStg) GetAllCreds() map[string]creds.Creds {
 }
 
 func (cs *CredsStg) GetCredsById(credsId string) creds.Creds {
-	return cs.credsStg[credsId]
+	return cs.credsStg[credsId];
 }
 
 func (cs *CredsStg) SetCreds(credsId string, creds creds.Creds) {
