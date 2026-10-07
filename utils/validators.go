@@ -66,3 +66,24 @@ func ValidateCreds(id string, c creds.Creds) error {
 
 	return nil
 }
+
+func ValidateAuthMethod(authMethod, credsType string) error {
+	switch authMethod {
+	case constants.AM_Basic:
+		if credsType != constants.CT_Basic {
+			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_Basic)
+		}
+	case constants.AM_Bearer:
+		if credsType != constants.CT_Bearer && credsType != constants.CT_OAuth2 {
+			return fmt.Errorf("AuthMethod %s requires Bearer or OAuth2 credentials", authMethod)
+		}
+	case constants.AM_Header, constants.AM_Query:
+		if credsType != constants.CT_ApiKey {
+			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_ApiKey)
+		}
+	default:
+		return fmt.Errorf("Unknown AuthMethod %s", authMethod)
+	}
+
+	return nil
+}
