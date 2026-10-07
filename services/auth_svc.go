@@ -47,8 +47,15 @@ func SetCreds(credsList []creds.Creds) []error {
 	return nil
 }
 
-func GetAllCreds() map[string]creds.Creds {
-	return credsStg.GetAllCreds()
+func GetCredsForSync() map[string]creds.CredsState {
+	return credsStg.GetCredsForSync()
+}
+
+func MarkCredsSynced(credsId string, syncedAt time.Time) error {
+	if !credsStg.MarkCredsSynced(credsId, syncedAt) {
+		return fmt.Errorf("credentials with id %s were updated after the provided sync timestamp", credsId)
+	}
+	return nil
 }
 
 func GetCredsForRequest(credsId string) (creds.Creds, error) {
@@ -101,7 +108,6 @@ func GetCredsForRequest(credsId string) (creds.Creds, error) {
 	return currentCreds, nil
 }
 
-
 func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
 	currentCreds, err := GetCredsForRequest(req.CredsId)
 	if err != nil {
@@ -142,7 +148,7 @@ func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
 		if !ok {
 			panic("Auth Method/Creds Type discrepancy")
 		}
-		headerValue = "Basic " + base64.StdEncoding.EncodeToString([]byte(basic.Username + ":" + basic.Password))
+		headerValue = "Basic " + base64.StdEncoding.EncodeToString([]byte(basic.Username+":"+basic.Password))
 
 	case constants.AM_Bearer:
 		var token string
@@ -166,7 +172,7 @@ func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
 
 	case constants.AM_Header:
 		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
- 		if !ok {
+		if !ok {
 			panic("Auth Method/Creds Type discrepancy")
 		}
 		headerValue = apiKey.ApiKey
@@ -174,7 +180,7 @@ func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
 
 	headers := make([]hm.Header, 0, len(req.Headers)+1)
 	headers = append(headers, req.Headers...)
-	headers = append(headers, hm.Header({Name: headerName, Value: &headerValue}))
+	headers = append(headers, hm.Header{Name: headerName, Value: &headerValue})
 	req.Headers = headers
 
 	return req, nil
@@ -248,11 +254,12 @@ func refreshOAuthToken(currentCreds creds.Creds) error {
 	oauth2.RefreshToken = tokenResponse.RefreshToken
 	oauth2.ExpirationDate = time.Now().Add(time.Duration(tokenResponse.ExpiresIn) * time.Second)
 
-	credsStg.SetCreds(currentCreds.Id, creds.Creds{
+	updatedCreds := creds.Creds{
 		Id:        currentCreds.Id,
 		CredsType: currentCreds.CredsType,
 		Creds:     oauth2,
-	})
+	}
+	credsStg.UpdateCreds(currentCreds.Id, updatedCreds)
 
 	return nil
 }
