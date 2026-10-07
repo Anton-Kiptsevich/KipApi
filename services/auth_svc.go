@@ -11,12 +11,16 @@ import (
 )
 
 var (
-	credsStg storage.CredsStg
-	tokenUpdateLocks map[string]sync.Mutex
+	credsStg         storage.CredsStg
+	tokenUpdateLocks map[string]*sync.Mutex
+	tokenLocksMux    sync.Mutex
 )
 
 func InitCredsStg() {
 	credsStg = credsStg.InitCredsStg()
+	tokenLocksMux.Lock()
+	tokenUpdateLocks = make(map[string]*sync.Mutex)
+	tokenLocksMux.Unlock()
 }
 
 func SetCreds(credsList []creds.Creds) []error {
@@ -40,26 +44,51 @@ func GetAllCreds() map[string]creds.Creds {
 }
 
 func GetCredsById(credsId string) creds.Creds {
-	creds := credsStg.GetCredsById(credsId)
-	if creds.CredsType == constants.CT_OAuth2 {
-		oauth2, ok := creds.Creds.(creds.OAuth2Creds)
-		if !ok {
-			panic("Smth is wrong in GetCredsById")
-		}
-		if oauth2.ExpirationDate.Before(time.Now().Add(5 * time.Second)) {
-			if _, ok := tokenUpdateLocks[creds.Id]; !ok {
-				tokenUpdateLocks[creds.Id] = sync.Mutex{}
-			}
-			mux := tokenUpdateLocks[creds.Id]
-			mux.Lock()
-			refreshOAuthToken(oauth2)
-			mux.Unlock()
-		}
+	currentCreds := credsStg.GetCredsById(credsId)
 
+	if currentCreds.CredsType != constants.CT_OAuth2 {
+		return currentCreds
 	}
+
+	oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
+	if !ok {
+		panic("Smth is wrong in GetCredsById")
+	}
+
+	if !oauth2.ExpirationDate.Before(time.Now().Add(5 * time.Second)) {
+		return currentCreds
+	}
+
+	tokenLocksMux.Lock()
+	mux, ok := tokenUpdateLocks[credsId]
+	if !ok {
+		mux = &sync.Mutex{}
+		tokenUpdateLocks[credsId] = mux
+	}
+	tokenLocksMux.Unlock()
+
+	mux.Lock()
+	defer mux.Unlock()
+
+	currentCreds = credsStg.GetCredsById(credsId)
+
+	if currentCreds.CredsType != constants.CT_OAuth2 {
+		return currentCreds
+	}
+
+	oauth2, ok = currentCreds.Creds.(creds.OAuth2Creds)
+	if !ok {
+		panic("Smth is wrong in GetCredsById")
+	}
+
+	if !oauth2.ExpirationDate.Before(time.Now().Add(5 * time.Second)) {
+		return currentCreds
+	}
+
+	refreshOAuthToken(oauth2)
+
 	return credsStg.GetCredsById(credsId)
 }
 
-func refreshOAuthToken(oauth2Creds creds.Creds) {
-	
+func refreshOAuthToken(oauth2Creds creds.OAuth2Creds) {
 }
