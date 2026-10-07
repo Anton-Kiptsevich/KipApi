@@ -88,7 +88,10 @@ func GetCredsForRequest(req hm.Request) (creds.Creds, error) {
 		return currentCreds, nil
 	}
 
-	refreshOAuthToken(req, currentCreds)
+	err := refreshOAuthToken(req, currentCreds)
+	if err != nil {
+		return creds.Creds{}, err
+	}
 
 	currentCreds, _ = credsStg.GetCredsById(req.CredsId)
 	return currentCreds, nil
