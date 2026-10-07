@@ -20,7 +20,6 @@ func getDigestAuthorization(req hm.Request, currentCreds creds.Creds) (string, e
 	}
 
 	challengeReq := req
-	challengeReq.Headers = removeHeader(challengeReq.Headers, "Authorization")
 
 	res, err := MakeHttpRequest(&challengeReq)
 	if err != nil {
@@ -205,14 +204,4 @@ func containsToken(value, token string) bool {
 		}
 	}
 	return false
-}
-
-func removeHeader(headers []hm.Header, name string) []hm.Header {
-	result := make([]hm.Header, 0, len(headers))
-	for _, header := range headers {
-		if !strings.EqualFold(header.Name, name) {
-			result = append(result, header)
-		}
-	}
-	return result
 }
