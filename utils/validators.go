@@ -47,7 +47,7 @@ func ValidateCreds(id string, c creds.Creds) error {
 		if !ok {
 			return fmt.Errorf("%s: CredsType %s requires OAuth2Creds", id, c.CredsType)
 		}
-		if	oauth2.AccessToken == "" || oauth2.RefreshToken == "" || oauth2.TokenURL == "" ||
+		if oauth2.AccessToken == "" || oauth2.RefreshToken == "" || oauth2.TokenURL == "" ||
 			oauth2.ClientID == "" || oauth2.ClientSecret == "" || oauth2.ExpirationDate.IsZero() {
 			return fmt.Errorf("%s: OAuth2Creds must contain AccessToken, RefreshToken, ExpirationDate, TokenURL, ClientID and ClientSecret", id)
 		}
@@ -58,6 +58,14 @@ func ValidateCreds(id string, c creds.Creds) error {
 		}
 		if apiKey.ApiKey == "" || apiKey.FieldName == "" {
 			return fmt.Errorf("%s: ApiKeyCreds must contain ApiKey and FieldName", id)
+		}
+	case constants.CT_Digest:
+		digest, ok := c.Creds.(creds.DigestCreds)
+		if !ok {
+			return fmt.Errorf("%s: CredsType %s requires DigestCreds", id, c.CredsType)
+		}
+		if digest.Username == "" || digest.Password == "" {
+			return fmt.Errorf("%s: DigestCreds must contain Username and Password", id)
 		}
 	default:
 		return fmt.Errorf("%s: Unknown CredsType %s", id, c.CredsType)
@@ -79,6 +87,10 @@ func ValidateAuthMethod(authMethod, credsType string) error {
 	case constants.AM_Header, constants.AM_Query:
 		if credsType != constants.CT_ApiKey {
 			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_ApiKey)
+		}
+	case constants.AM_Digest:
+		if credsType != constants.CT_Digest {
+			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_Digest)
 		}
 	default:
 		return fmt.Errorf("Unknown AuthMethod %s", authMethod)
