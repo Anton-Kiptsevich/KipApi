@@ -12,14 +12,14 @@ type CredsStg struct {
 }
 
 func (cs *CredsStg) InitCredsStg() CredsStg {
-	cs.credsMux.Lock()
+	cs.credsMux.RLock()
 	defer cs.credsMux.Unlock()
 
 	return CredsStg{ credsStg : make(map[string]creds.Creds) }
 }
 
 func (cs *CredsStg) GetAllCreds() map[string]creds.Creds {
-	cs.credsMux.Lock()
+	cs.credsMux.RLock()
 	defer cs.credsMux.Unlock()
 	result := make(map[string]creds.Creds, len(cs.credsStg))
 	for id, c := range cs.credsStg {
@@ -29,7 +29,7 @@ func (cs *CredsStg) GetAllCreds() map[string]creds.Creds {
 }
 
 func (cs *CredsStg) GetCredsById(credsId string) creds.Creds {
-	cs.credsMux.Lock()
+	cs.credsMux.RLock()
 	defer cs.credsMux.Unlock()
 	return cs.credsStg[credsId]
 }
