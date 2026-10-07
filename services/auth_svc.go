@@ -16,7 +16,7 @@ var (
 	tokenLocksMux    sync.Mutex
 )
 
-func InitCredsStg() {
+func InitCredsSvc() {
 	credsStg = credsStg.InitCredsStg()
 	tokenLocksMux.Lock()
 	tokenUpdateLocks = make(map[string]*sync.Mutex)
@@ -72,23 +72,18 @@ func GetCredsById(credsId string) creds.Creds {
 
 	currentCreds = credsStg.GetCredsById(credsId)
 
-	if currentCreds.CredsType != constants.CT_OAuth2 {
-		return currentCreds
-	}
-
-	oauth2, ok = currentCreds.Creds.(creds.OAuth2Creds)
-	if !ok {
-		panic("Smth is wrong in GetCredsById")
-	}
+	oauth2, _ = currentCreds.Creds.(creds.OAuth2Creds)
 
 	if !oauth2.ExpirationDate.Before(time.Now().Add(5 * time.Second)) {
 		return currentCreds
 	}
 
-	refreshOAuthToken(oauth2)
+	refreshOAuthToken(currentCreds)
 
 	return credsStg.GetCredsById(credsId)
 }
 
-func refreshOAuthToken(oauth2Creds creds.OAuth2Creds) {
+func refreshOAuthToken(creds creds.Creds) {
+
+	credsStg.SetCreds(creds.Id, creds)
 }
