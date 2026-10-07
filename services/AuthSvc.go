@@ -9,7 +9,7 @@ import (
 
 var (
 	credsStg storage.CredsStg
-	credsMux sync.Mutex
+	credsMux sync.RWMutex
 )
 
 func InitCredsStg() {
@@ -29,15 +29,20 @@ func SetCreds(credsList []creds.Creds) {
 }
 
 func GetAllCreds() map[string]creds.Creds {
-	credsMux.Lock()
-	defer credsMux.Unlock()
+	credsMux.RLock()
+	defer credsMux.RUnlock()
 
-	return credsStg.GetAllCreds()
+	result := make(map[string]creds.Creds, len(credsStg.GetAllCreds()))
+	for id, c := range credsStg.GetAllCreds() {
+		result[id] = c
+	}
+
+	return result
 }
 
 func GetCredsById(credsId string) creds.Creds {
-	credsMux.Lock()
-	defer credsMux.Unlock()
+	credsMux.RLock()
+	defer credsMux.RUnlock()
 
 	return credsStg.GetCredsById(credsId)
 }
