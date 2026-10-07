@@ -3,6 +3,7 @@ package services
 import (
 	"crypto/md5"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"net/url"
@@ -33,11 +34,24 @@ func getDigestAuthorization(req hm.Request, currentCreds creds.Creds) (string, e
 	if err != nil {
 		return "", err
 	}
-	if challenge.Algorithm != "" && !strings.EqualFold(challenge.Algorithm, "MD5") {
+
+	algorithm := strings.ToLower(challenge.Algorithm)
+	if algorithm == "" {
+		algorithm = "md5"
+	}
+	if algorithm != "md5" && algorithm != "md5-sess" && algorithm != "sha-256" {
 		return "", fmt.Errorf("unsupported Digest algorithm %s", challenge.Algorithm)
 	}
-	if challenge.Qop != "" && !containsToken(challenge.Qop, "auth") {
-		return "", fmt.Errorf("unsupported Digest qop %s", challenge.Qop)
+
+	qop := ""
+	if challenge.Qop != "" {
+		if containsToken(challenge.Qop, "auth") {
+			qop = "auth"
+		} else if containsToken(challenge.Qop, "auth-int") {
+			qop = "auth-int"
+		} else {
+			return "", fmt.Errorf("unsupported Digest qop %s", challenge.Qop)
+		}
 	}
 
 	uri := req.Path
@@ -48,24 +62,55 @@ func getDigestAuthorization(req hm.Request, currentCreds creds.Creds) (string, e
 		uri = parsed.RequestURI()
 	}
 
-	ha1 := md5Hex(digestCreds.Username + ":" + challenge.Realm + ":" + digestCreds.Password)
-	ha2 := md5Hex(req.Method + ":" + uri)
-
-	if challenge.Qop == "" {
-		response := md5Hex(ha1 + ":" + challenge.Nonce + ":" + ha2)
-		return "Digest username=\"" + digestCreds.Username + "\", realm=\"" + challenge.Realm + "\", nonce=\"" + challenge.Nonce + "\", uri=\"" + uri + "\", response=\"" + response + "\"", nil
+	hashValue := func(value string) string {
+		var sum []byte
+		switch algorithm {
+		case "md5", "md5-sess":
+			hash := md5.Sum([]byte(value))
+			sum = hash[:]
+		case "sha-256":
+			hash := sha256.Sum256([]byte(value))
+			sum = hash[:]
+		}
+		return hex.EncodeToString(sum)
 	}
 
-	cnonce, err := generateCnonce()
-	if err != nil {
-		return "", err
+	cnonce := ""
+	if algorithm == "md5-sess" || qop != "" {
+		cnonce, err = generateCnonce()
+		if err != nil {
+			return "", err
+		}
 	}
-	nc := "00000001"
-	response := md5Hex(ha1 + ":" + challenge.Nonce + ":" + nc + ":" + cnonce + ":auth:" + ha2)
-	authorization := "Digest username=\"" + digestCreds.Username + "\", realm=\"" + challenge.Realm + "\", nonce=\"" + challenge.Nonce + "\", uri=\"" + uri + "\", algorithm=MD5, qop=auth, nc=" + nc + ", cnonce=\"" + cnonce + "\", response=\"" + response + "\""
+
+	ha1 := hashValue(digestCreds.Username + ":" + challenge.Realm + ":" + digestCreds.Password)
+	if algorithm == "md5-sess" {
+		ha1 = hashValue(ha1 + ":" + challenge.Nonce + ":" + cnonce)
+	}
+
+	ha2Value := req.Method + ":" + uri
+	if qop == "auth-int" {
+		ha2Value += ":" + hashValue(req.Body)
+	}
+	ha2 := hashValue(ha2Value)
+
+	authorization := "Digest username=\"" + digestCreds.Username + "\", realm=\"" + challenge.Realm + "\", nonce=\"" + challenge.Nonce + "\", uri=\"" + uri + "\""
+	if algorithm != "md5" || challenge.Algorithm != "" {
+		authorization += ", algorithm=" + challenge.Algorithm
+	}
+	if qop == "" {
+		response := hashValue(ha1 + ":" + challenge.Nonce + ":" + ha2)
+		authorization += ", response=\"" + response + "\""
+	} else {
+		nc := "00000001"
+		response := hashValue(ha1 + ":" + challenge.Nonce + ":" + nc + ":" + cnonce + ":" + qop + ":" + ha2)
+		authorization += ", qop=" + qop + ", nc=" + nc + ", cnonce=\"" + cnonce + "\", response=\"" + response + "\""
+	}
+
 	if challenge.Opaque != "" {
 		authorization += ", opaque=\"" + challenge.Opaque + "\""
 	}
+
 	return authorization, nil
 }
 
@@ -143,11 +188,6 @@ func parseDigestParams(value string) (map[string]string, error) {
 		result[strings.ToLower(name)] = parameter
 		value = strings.TrimPrefix(strings.TrimSpace(value), ",")
 	}
-}
-
-func md5Hex(value string) string {
-	hash := md5.Sum([]byte(value))
-	return hex.EncodeToString(hash[:])
 }
 
 func generateCnonce() (string, error) {
