@@ -27,16 +27,28 @@ func ValidateHttpRequest(req *hm.Request) error {
 func ValidateCreds(c creds.Creds) error {
 	switch c.CredsType {
 	case constants.CT_Basic:
-		if _, ok := c.Creds.(creds.BasicCreds); !ok {
+		basic, ok := c.Creds.(creds.BasicCreds)
+		if !ok {
 			return fmt.Errorf("CredsType %s requires BasicCreds", c.CredsType)
 		}
+		if basic.Username == "" || basic.Password == "" {
+			return fmt.Errorf("BasicCreds must contain Username and Password")
+		}
 	case constants.CT_Bearer:
-		if _, ok := c.Creds.(creds.BearerCreds); !ok {
+		bearer, ok := c.Creds.(creds.BearerCreds)
+		if !ok {
 			return fmt.Errorf("CredsType %s requires BearerCreds", c.CredsType)
 		}
+		if bearer.Token == "" {
+			return fmt.Errorf("BearerCreds must contain Token")
+		}
 	case constants.CT_OAuth2:
-		if _, ok := c.Creds.(creds.OAuth2Creds); !ok {
+		oauth2, ok := c.Creds.(creds.OAuth2Creds)
+		if !ok {
 			return fmt.Errorf("CredsType %s requires OAuth2Creds", c.CredsType)
+		}
+		if oauth2.AccessToken == "" || oauth2.RefreshToken == "" {
+			return fmt.Errorf("OAuth2Creds must contain AccessToken and RefreshToken")
 		}
 	default:
 		return fmt.Errorf("Unknown CredsType %s", c.CredsType)
