@@ -111,13 +111,14 @@ func refreshOAuthToken(currentCreds creds.Creds) error {
 	form.Set("refresh_token", oauth2.RefreshToken)
 	form.Set("client_id", oauth2.ClientID)
 	form.Set("client_secret", oauth2.ClientSecret)
+	contentType := "application/x-www-form-urlencoded"
 
 	req := hm.Request{
 		Method:  http.MethodPost,
 		BaseUrl: oauth2.TokenURL,
 		Headers: []hm.Header{{
 			Name:  "Content-Type",
-			Value: stringPtr("application/x-www-form-urlencoded"),
+			Value: &contentType,
 		}},
 		Body: form.Encode(),
 	}
@@ -174,8 +175,4 @@ func refreshOAuthToken(currentCreds creds.Creds) error {
 	})
 
 	return nil
-}
-
-func stringPtr(s string) *string {
-	return &s
 }

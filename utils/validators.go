@@ -47,14 +47,10 @@ func ValidateCreds(id string, c creds.Creds) error {
 		if !ok {
 			return fmt.Errorf("%s: CredsType %s requires OAuth2Creds", id, c.CredsType)
 		}
-		if oauth2.AccessToken == "" || oauth2.RefreshToken == "" {
-			return fmt.Errorf("%s: OAuth2Creds must contain AccessToken and RefreshToken", id)
-		}
-		if oauth2.ExpirationDate.IsZero() {
-			return fmt.Errorf("%s: OAuth2Creds must contain ExpirationDate", id)
-		}
-		if oauth2.TokenURL == "" || oauth2.ClientID == "" || oauth2.ClientSecret == "" {
-			return fmt.Errorf("%s: OAuth2Creds must contain TokenURL, ClientID and ClientSecret", id)
+		if	oauth2.AccessToken == "" || oauth2.RefreshToken == "" || oauth2.TokenURL == "" || 
+			oauth2.ClientID == "" || oauth2.ClientSecret == "" || oauth2.ExpirationDate.IsZero() 
+		{
+			return fmt.Errorf("%s: OAuth2Creds must contain AccessToken, RefreshToken, ExpirationDate, TokenURL, ClientID and ClientSecret", id)
 		}
 	default:
 		return fmt.Errorf("%s: Unknown CredsType %s", id, c.CredsType)
