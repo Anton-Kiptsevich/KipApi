@@ -1,6 +1,7 @@
 package services
 
 import (
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"net/url"
@@ -106,11 +107,30 @@ func GetCredsForRequest(credsId string) (creds.Creds, error) {
 	return updatedCreds, nil
 }
 
-func InitAuthorizationHeaderIfNeeded(req hm.Request) (hm.Request, error) {
+func InitAuthorizationIfNeeded(req hm.Request) (hm.Request, error) {
 	currentCreds, err := GetCredsForRequest(req.CredsId)
 	if err != nil {
 		return req, err
 	}
+	if req.AuthMethod == constants.AM_MTLS {
+		if req.TlsCert != nil {
+			return req, nil
+		}
+
+		mtls, ok := currentCreds.Creds.(creds.MTLSCreds)
+		if !ok {
+			panic("Auth Method/Creds Type discrepancy")
+		}
+
+		cert, err := tls.X509KeyPair(mtls.ClientCert, mtls.ClientKey)
+		if err != nil {
+			return req, err
+		}
+
+		req.TlsCert = &cert
+		return req, nil
+	}
+
 	if req.AuthMethod == constants.AM_Query {
 		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
 		if !ok {

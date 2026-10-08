@@ -1,5 +1,7 @@
 package http
 
+import "crypto/tls"
+
 type Request struct {
 	CredsId    string
 	AuthMethod string
@@ -8,4 +10,5 @@ type Request struct {
 	Path       string
 	Headers    []Header
 	Body       string
+	TlsCert    *tls.Certificate
 }
