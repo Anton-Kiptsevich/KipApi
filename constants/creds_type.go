@@ -6,4 +6,5 @@ const (
 	CT_OAuth2  = "OAuth 2.0"
 	CT_ApiKey  = "API Key"
 	CT_Digest  = "Digest"
+	CT_MTLS    = "mTLS"
 )
