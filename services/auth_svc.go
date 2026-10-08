@@ -12,6 +12,7 @@ import (
 	"github.com/Anton-Kiptsevich/KipApi/constants"
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
+	auth "github.com/Anton-Kiptsevich/KipApi/services/auth"
 	"github.com/Anton-Kiptsevich/KipApi/storage"
 	"github.com/Anton-Kiptsevich/KipApi/utils"
 )
@@ -98,7 +99,7 @@ func GetCredsForRequest(credsId string) (creds.Creds, error) {
 		return currentCreds, nil
 	}
 
-	updatedCreds, err := refreshOAuthToken(currentCreds)
+	updatedCreds, err := auth.RefreshOAuthToken(currentCreds)
 	if err != nil {
 		return creds.Creds{}, err
 	}
@@ -197,7 +198,7 @@ func InitAuthorizationIfNeeded(req hm.Request) (hm.Request, error) {
 		headerValue = apiKey.ApiKey
 
 	case constants.AM_Digest:
-		headerValue, err = getDigestAuthorization(req, currentCreds)
+		headerValue, err = auth.GetDigestAuthorization(req, currentCreds)
 		if err != nil {
 			return req, err
 		}

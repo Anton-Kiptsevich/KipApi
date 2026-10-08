@@ -2,6 +2,7 @@ package services
 
 import (
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
+	"github.com/Anton-Kiptsevich/KipApi/services/base"
 	"github.com/Anton-Kiptsevich/KipApi/utils"
 )
 
@@ -20,5 +21,5 @@ func MakeApiCall(req hm.Request) (hm.Response, error) {
 		return hm.Response{}, err
 	}
 
-	return MakeHttpRequest(&req)
+	return base.MakeHttpRequest(&req)
 }

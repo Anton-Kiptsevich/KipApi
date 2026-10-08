@@ -1,4 +1,4 @@
-package services
+package auth
 
 import (
 	"crypto/md5"
@@ -11,9 +11,10 @@ import (
 
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
+	"github.com/Anton-Kiptsevich/KipApi/services/base"
 )
 
-func getDigestAuthorization(req hm.Request, currentCreds creds.Creds) (string, error) {
+func GetDigestAuthorization(req hm.Request, currentCreds creds.Creds) (string, error) {
 	digestCreds, ok := currentCreds.Creds.(creds.DigestCreds)
 	if !ok {
 		return "", fmt.Errorf("credentials with id %s are not Digest credentials", currentCreds.Id)
@@ -21,7 +22,7 @@ func getDigestAuthorization(req hm.Request, currentCreds creds.Creds) (string, e
 
 	challengeReq := req
 
-	res, err := MakeHttpRequest(&challengeReq)
+	res, err := base.MakeHttpRequest(&challengeReq)
 	if err != nil {
 		return "", err
 	}

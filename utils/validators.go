@@ -3,6 +3,7 @@ package utils
 import (
 	"crypto/tls"
 	"fmt"
+	"net/url"
 
 	"github.com/Anton-Kiptsevich/KipApi/constants"
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
@@ -20,6 +21,9 @@ func ValidateHttpRequest(req *hm.Request) error {
 		if (h.Value == nil) == (h.Values == nil) {
 			return fmt.Errorf("Header can only have either Value or Values")
 		}
+	}
+	if _, err := url.Parse(req.BaseUrl + req.Path); err != nil {
+		return fmt.Errorf("Invalid request URL: %w", err)
 	}
 	return nil
 }

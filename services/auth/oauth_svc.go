@@ -1,4 +1,4 @@
-package services
+package auth
 
 import (
 	"encoding/json"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
+	"github.com/Anton-Kiptsevich/KipApi/services/base"
 )
 
 type tokenResponse struct {
@@ -19,7 +20,7 @@ type tokenResponse struct {
 	ExpiresIn    int64  `json:"expires_in"`
 }
 
-func refreshOAuthToken(currentCreds creds.Creds) (creds.Creds, error) {
+func RefreshOAuthToken(currentCreds creds.Creds) (creds.Creds, error) {
 	oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
 	if !ok {
 		return creds.Creds{}, fmt.Errorf("credentials with id %s are not OAuth2 credentials", currentCreds.Id)
@@ -102,7 +103,7 @@ func makeOAuthTokenRequest(tokenURL string, form url.Values) (hm.Response, error
 		Body: form.Encode(),
 	}
 
-	return MakeHttpRequest(&req)
+	return base.MakeHttpRequest(&req)
 }
 
 func parseTokenResponse(res hm.Response, operation string) (tokenResponse, error) {
