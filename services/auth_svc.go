@@ -124,7 +124,7 @@ func InitAuthorizationIfNeeded(req hm.Request) (hm.Request, error) {
 
 		cert, err := tls.X509KeyPair(mtls.ClientCert, mtls.ClientKey)
 		if err != nil {
-			return req, err
+			panic("Invalid mtls.ClientCert/mtls.ClientKey pair")
 		}
 
 		req.TlsCert = &cert
