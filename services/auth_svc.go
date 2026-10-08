@@ -139,7 +139,7 @@ func InitAuthorizationIfNeeded(req hm.Request) (hm.Request, error) {
 
 		u, err := url.Parse(req.BaseUrl + req.Path)
 		if err != nil {
-			return req, err
+			panic(err)
 		}
 		q := u.Query()
 		if _, exists := q[apiKey.FieldName]; !exists {
