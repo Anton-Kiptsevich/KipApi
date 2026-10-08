@@ -15,7 +15,7 @@ func MakeApiCall(req hm.Request) (hm.Response, error) {
 		return hm.Response{}, err
 	}
 
-	req, err = InitAuthorizationHeaderIfNeeded(req)
+	req, err = InitAuthorizationIfNeeded(req)
 	if err != nil {
 		return hm.Response{}, err
 	}
