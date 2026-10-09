@@ -1,135 +1,217 @@
 # KipApi
 
-KipApi is a Go library for simplifying integrations with external HTTP APIs.
+KipApi is a Go library for making HTTP requests to external APIs with reusable credential and authentication handling. It provides integration infrastructure—not API-specific clients, business logic, or persistent storage.
 
-It provides reusable infrastructure for:
+## Installation
 
-- HTTP requests and responses;
-- credentials management;
-- authentication;
-- OAuth 2.0 token refresh;
-- Digest authentication;
-- mTLS;
-- reusable HTTP request flows.
-
-KipApi does not implement business logic or clients for specific services. It provides the common infrastructure required to build them.
-
----
-
-## Core Concept
-
-An integration typically consists of:
-
-```text
-Application
-    │
-    ▼
-  KipApi
-    │
-    ├── Credentials
-    ├── Authentication
-    └── HTTP request
-            │
-            ▼
-      External API
+```bash
+go get github.com/Anton-Kiptsevich/KipApi
 ```
 
-The application defines what it wants to do.
+## Quick start
 
-KipApi handles the common mechanics required to communicate with the external API.
+The usual flow is:
 
----
+1. Initialize KipApi's in-memory credential store once during application startup.
+2. Register credentials with `SetCreds`.
+3. Call `MakeApiCall` with a credential ID, authentication method, and HTTP request.
+4. Handle the response and any returned error.
 
-## Authentication
-
-KipApi separates **credential type** from **authentication method**.
-
-Credential types describe what credentials are available:
-
-```text
-Basic
-Bearer
-OAuth 2.0
-API Key
-Digest
-mTLS
-```
-
-Authentication methods describe how credentials are applied to a request:
-
-```text
-Basic
-Bearer
-Header
-Query
-Digest
-mTLS
-```
-
-For example, OAuth 2.0 credentials are used to obtain an access token, which is then sent using Bearer authentication.
-
-This separation allows authentication logic to remain independent from individual integrations.
-
-### Direct OAuth token functions
-
-The functions in `services/auth`, including `GetOAuthTokenByPassword` and `RefreshOAuthToken`, are available for direct use. They perform token requests and return credentials, but they do **not** update KipApi's in-memory credentials store.
-
-If you call `RefreshOAuthToken` directly for credentials already registered in KipApi, you are responsible for updating the stored credentials with the returned value, for example by calling `SetCreds`. Otherwise, the credentials in your application storage and KipApi's in-memory store may become out of sync. The same applies when obtaining new OAuth credentials directly: register or persist them as appropriate for your application.
-
-The standard `MakeApiCall` flow handles token refresh and updates KipApi's in-memory credentials automatically.
-
----
-
-## Making a Request
-
-An API call contains the HTTP request and the information required to authenticate it:
+This example sends a GET request with a Bearer token:
 
 ```go
-call := http.ApiCall{
-    CredsId:    "550e8400-e29b-41d4-a716-446655440000",
-    AuthMethod: constants.AM_Bearer,
-    Request: http.Request{
+package main
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/Anton-Kiptsevich/KipApi/constants"
+	"github.com/Anton-Kiptsevich/KipApi/models/creds"
+	httpmodel "github.com/Anton-Kiptsevich/KipApi/models/http"
+	"github.com/Anton-Kiptsevich/KipApi/services"
+)
+
+func main() {
+	// Initialize once during application startup.
+	services.InitCredsSvc()
+
+	credential := creds.Creds{
+		Id:        "example-api",
+		CredsType: constants.CT_Bearer,
+		Creds:     creds.BearerCreds{Token: "YOUR_ACCESS_TOKEN"},
+	}
+	if errs := services.SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+		for _, err := range errs {
+			log.Println("invalid credentials:", err)
+		}
+		return
+	}
+
+	call := httpmodel.ApiCall{
+		CredsId:    "example-api",
+		AuthMethod: constants.AM_Bearer,
+		Request: httpmodel.Request{
+			Method:  "GET",
+			BaseUrl: "https://api.example.com",
+			Path:    "/users",
+		},
+	}
+
+	response, err := services.MakeApiCall(call)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(response.Status)
+	fmt.Println(response.Body)
+}
+```
+
+Replace the example URL and token with your API's values. Load real secrets from configuration or a secret store; do not hard-code them in source control.
+
+## Credentials and authentication
+
+A credential describes the secret material you have. An authentication method describes how that material is sent with a request. These are configured separately.
+
+| Credential type | Model | Authentication method |
+|---|---|---|
+| Basic username/password | `creds.BasicCreds` | `constants.AM_Basic` |
+| Static Bearer token | `creds.BearerCreds` | `constants.AM_Bearer` |
+| OAuth 2.0 tokens | `creds.OAuth2Creds` | `constants.AM_Bearer` |
+| API key | `creds.ApiKeyCreds` | `constants.AM_Header` or `constants.AM_Query` |
+| Digest username/password | `creds.DigestCreds` | `constants.AM_Digest` |
+| Client certificate/key | `creds.MTLSCreds` | `constants.AM_MTLS` |
+
+Wrap a specific credential model in `creds.Creds`:
+
+```go
+credential := creds.Creds{
+    Id:        "my-service",
+    CredsType: constants.CT_Basic,
+    Creds: creds.BasicCreds{
+        Username: "YOUR_USERNAME",
+        Password: "YOUR_PASSWORD",
+    },
+}
+errs := services.SetCreds([]creds.Creds{credential}, false)
+```
+
+Use a stable, unique `Id`; `MakeApiCall` looks up credentials by that ID. `SetCreds` validates each credential and returns validation errors, or `nil` if all entries are valid.
+
+For an API key, `creds.ApiKeyCreds.FieldName` is the header name for `AM_Header`, or the query parameter name for `AM_Query`. KipApi adds the key only if that header or query parameter is not already present.
+
+## Making an authenticated request
+
+`httpmodel.ApiCall` combines the credential ID, authentication method, and HTTP request:
+
+```go
+call := httpmodel.ApiCall{
+    CredsId:    "my-service",
+    AuthMethod: constants.AM_Header,
+    Request: httpmodel.Request{
         Method:  "GET",
         BaseUrl: "https://api.example.com",
         Path:    "/users",
     },
 }
+response, err := services.MakeApiCall(call)
 ```
 
-`CredsId` identifies the credentials to use for the API call.
+`httpmodel.Request` fields:
 
-KipApi handles the authentication and HTTP execution required to perform the call.
+- `Method`: HTTP method, such as `GET`, `POST`, `PUT`, or `DELETE`.
+- `BaseUrl`: base URL, such as `https://api.example.com`.
+- `Path`: endpoint path, such as `/users`.
+- `Headers`: optional request headers.
+- `Body`: optional request body as a string.
+- `TlsCert`: optional TLS client certificate.
 
-The application receives the resulting HTTP status, headers, and body.
+If the request already has an `Authorization` header, KipApi leaves it unchanged. For `AM_Header`, an existing header with the configured `FieldName` is also left unchanged.
 
----
+### Headers and body
 
-## Responsibility Boundary
+Each `httpmodel.Header` must set exactly one of `Value` or `Values`. Use `Value` for one value and `Values` for multiple values.
 
-KipApi is responsible for common integration mechanics:
-
-```text
-HTTP
-Authentication
-Credentials
-TLS
-Request execution
+```go
+contentType := "application/json"
+request := httpmodel.Request{
+    Method:  "POST",
+    BaseUrl: "https://api.example.com",
+    Path:    "/users",
+    Headers: []httpmodel.Header{
+        {Name: "Content-Type", Value: &contentType},
+    },
+    Body: `{"name":"Example"}`,
+}
 ```
 
-The application is responsible for integration-specific logic:
+KipApi sends `Body` as supplied; it does not serialize application structs into JSON. Encode your payload before assigning it.
 
-```text
-Business logic
-Entity mapping
-API-specific models
-Endpoint selection
-Response interpretation
+## Plain HTTP requests
+
+Use `services/base.MakeHttpRequest` when you want HTTP execution without credential lookup or automatic authentication:
+
+```go
+import (
+    httpmodel "github.com/Anton-Kiptsevich/KipApi/models/http"
+    "github.com/Anton-Kiptsevich/KipApi/services/base"
+)
+
+response, err := base.MakeHttpRequest(&httpmodel.Request{
+    Method:  "GET",
+    BaseUrl: "https://api.example.com",
+    Path:    "/health",
+})
 ```
 
-For example, KipApi can send a request to create a user, but it does not decide when or why that user should be created.
+Add any required authorization headers yourself. Transport, request-construction, or response-reading failures are returned as Go errors. HTTP statuses such as `401 Unauthorized` and `500 Internal Server Error` are responses, not automatically Go errors; inspect `response.Status` and `response.Body`.
 
----
+## OAuth 2.0
 
-## Design Goal
+For automatic refresh, register an OAuth credential with `CredsType: constants.CT_OAuth2` and `Creds: creds.OAuth2Creds{...}`. The model stores `AccessToken`, `RefreshToken`, `ExpirationDate`, `TokenURL`, `ClientID`, and `ClientSecret`.
 
-> **KipApi handles integration mechanics. The application handles integration logic.**
+When `MakeApiCall` uses `constants.AM_Bearer`, KipApi refreshes an OAuth2 token if it has expired or will expire within five seconds. The refreshed credentials are saved to KipApi's in-memory store and marked as needing synchronization with your application's persistent store.
+
+The `services/auth` package also exposes `GetOAuthTokenByPassword` and `RefreshOAuthToken` for direct token requests. These functions return credentials but do not update KipApi's store. If you use them for credentials already registered with KipApi, update both your application's persisted copy and KipApi's in-memory copy (for example, with `SetCreds`) to avoid divergence. Use the password grant only if your identity provider supports it.
+
+## Credential persistence and synchronization
+
+KipApi's credential store is in-memory, not a database. It is cleared when the process restarts; your application owns durable storage.
+
+The second argument to `SetCreds` controls whether the entry should be marked as needing persistence:
+
+- `false`: use when loading credentials that are already persisted by your application.
+- `true`: use when adding or updating credentials that still need to be saved by your application.
+
+To synchronize changes, call `GetCredsForSync`, persist each returned entry in your own storage, and call `MarkCredsSynced(id)` only after that save succeeds:
+
+```go
+pending := services.GetCredsForSync()
+for id, credential := range pending {
+    if err := saveCredentialToYourDatabase(id, credential); err != nil {
+        // Handle the error and leave this entry pending.
+        continue
+    }
+    if err := services.MarkCredsSynced(id); err != nil {
+        // Handle an unknown credential ID.
+    }
+}
+```
+
+`saveCredentialToYourDatabase` is a placeholder for your application's own persistence function, not a KipApi function. Credentials refreshed automatically during `MakeApiCall` are marked as needing synchronization too.
+
+## Public packages
+
+- `constants`: credential types and authentication methods.
+- `models/creds`: credential models.
+- `models/http`: HTTP request, response, header, and API-call models.
+- `services`: credential registration/synchronization and `MakeApiCall`.
+- `services/auth`: direct OAuth token helpers and Digest authorization.
+- `services/base`: low-level HTTP execution.
+
+The `internal/storage` and `internal/utils` packages are implementation details and cannot be imported by applications outside the KipApi module.
+
+## Responsibility boundary
+
+KipApi handles HTTP execution and common authentication mechanics. Your application handles business logic, API-specific models, endpoint selection, response interpretation, and persistent storage.

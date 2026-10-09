@@ -154,6 +154,14 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 	}
 
 	headerName := "Authorization"
+	if call.AuthMethod == constants.AM_Header {
+		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
+		if !ok {
+			panic("Auth Method/Creds Type discrepancy")
+		}
+		headerName = apiKey.FieldName
+	}
+
 	headerValue := ""
 
 	for _, h := range call.Request.Headers {
@@ -168,7 +176,7 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 		if !ok {
 			panic("Auth Method/Creds Type discrepancy")
 		}
-		headerValue = "Basic " + base64.StdEncoding.EncodeToString([]byte(basic.Username + ":" + basic.Password))
+		headerValue = "Basic " + base64.StdEncoding.EncodeToString([]byte(basic.Username+":"+basic.Password))
 
 	case constants.AM_Bearer:
 		var token string

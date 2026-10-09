@@ -56,7 +56,11 @@ func (cs *CredsStg) SetCreds(credsId string, c creds.Creds, markAsDirty bool) {
 	state, exists := cs.syncStg[credsId]
 	if !exists {
 		state.lastUpdatedAt = now
-		state.lastSyncedAt = now
+		if markAsDirty {
+			state.lastSyncedAt = time.Time{}
+		} else {
+			state.lastSyncedAt = now
+		}
 	} else if markAsDirty {
 		state.lastUpdatedAt = now
 	}
