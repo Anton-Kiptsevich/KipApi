@@ -108,14 +108,14 @@ func GetCredsForRequest(credsId string) (creds.Creds, error) {
 	return updatedCreds, nil
 }
 
-func InitAuthorizationIfNeeded(req hm.Request) (hm.Request, error) {
+func InitAuthorizationIfNeeded(req hm.AuthorizedRequest) (hm.Request, error) {
 	currentCreds, err := GetCredsForRequest(req.CredsId)
 	if err != nil {
-		return req, err
+		return req.HttoRequest, err
 	}
 	if req.AuthMethod == constants.AM_MTLS {
-		if req.TlsCert != nil {
-			return req, nil
+		if req.HttoRequest.TlsCert != nil {
+			return req.HttoRequest, nil
 		}
 
 		mtls, ok := currentCreds.Creds.(creds.MTLSCreds)
@@ -128,8 +128,8 @@ func InitAuthorizationIfNeeded(req hm.Request) (hm.Request, error) {
 			panic("Invalid mtls.ClientCert/mtls.ClientKey pair")
 		}
 
-		req.TlsCert = &cert
-		return req, nil
+		req.HttoRequest.TlsCert = &cert
+		return req.HttoRequest, nil
 	}
 
 	if req.AuthMethod == constants.AM_Query {
@@ -138,27 +138,27 @@ func InitAuthorizationIfNeeded(req hm.Request) (hm.Request, error) {
 			panic("Auth Method/Creds Type discrepancy")
 		}
 
-		u, err := url.Parse(req.BaseUrl + req.Path)
+		u, err := url.Parse(req.HttoRequest.BaseUrl + req.HttoRequest.Path)
 		if err != nil {
-			panic(err)
+			panic("Invalid request URL")
 		}
 		q := u.Query()
 		if _, exists := q[apiKey.FieldName]; !exists {
 			q.Set(apiKey.FieldName, apiKey.ApiKey)
 			u.RawQuery = q.Encode()
-			req.BaseUrl = u.Scheme + "://" + u.Host
-			req.Path = u.RequestURI()
+			req.HttoRequest.BaseUrl = u.Scheme + "://" + u.Host
+			req.HttoRequest.Path = u.RequestURI()
 		}
 
-		return req, nil
+		return req.HttoRequest, nil
 	}
 
 	headerName := "Authorization"
 	headerValue := ""
 
-	for _, h := range req.Headers {
+	for _, h := range req.HttoRequest.Headers {
 		if strings.EqualFold(h.Name, headerName) {
-			return req, nil
+			return req.HttoRequest, nil
 		}
 	}
 
@@ -168,7 +168,7 @@ func InitAuthorizationIfNeeded(req hm.Request) (hm.Request, error) {
 		if !ok {
 			panic("Auth Method/Creds Type discrepancy")
 		}
-		headerValue = "Basic " + base64.StdEncoding.EncodeToString([]byte(basic.Username+":"+basic.Password))
+		headerValue = "Basic " + base64.StdEncoding.EncodeToString([]byte(basic.Username + ":" + basic.Password))
 
 	case constants.AM_Bearer:
 		var token string
@@ -198,16 +198,16 @@ func InitAuthorizationIfNeeded(req hm.Request) (hm.Request, error) {
 		headerValue = apiKey.ApiKey
 
 	case constants.AM_Digest:
-		headerValue, err = auth.GetDigestAuthorization(req, currentCreds)
+		headerValue, err = auth.GetDigestAuthorization(req.HttoRequest, currentCreds)
 		if err != nil {
-			return req, err
+			return req.HttoRequest, err
 		}
 	}
 
-	headers := make([]hm.Header, 0, len(req.Headers)+1)
-	headers = append(headers, req.Headers...)
+	headers := make([]hm.Header, 0, len(req.HttoRequest.Headers)+1)
+	headers = append(headers, req.HttoRequest.Headers...)
 	headers = append(headers, hm.Header{Name: headerName, Value: &headerValue})
-	req.Headers = headers
+	req.HttoRequest.Headers = headers
 
-	return req, nil
+	return req.HttoRequest, nil
 }
