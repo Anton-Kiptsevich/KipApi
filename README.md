@@ -37,7 +37,7 @@ func main() {
 	services.InitCredsSvc()
 
 	credential := creds.Creds{
-		Id:        "example-api",
+		Id:        "550e8400-e29b-41d4-a716-446655440000",
 		CredsType: constants.CT_Bearer,
 		Creds:     creds.BearerCreds{Token: "YOUR_ACCESS_TOKEN"},
 	}
@@ -49,7 +49,7 @@ func main() {
 	}
 
 	call := httpmodel.ApiCall{
-		CredsId:    "example-api",
+		CredsId:    "550e8400-e29b-41d4-a716-446655440000",
 		AuthMethod: constants.AM_Bearer,
 		Request: httpmodel.Request{
 			Method:  "GET",
@@ -87,7 +87,7 @@ Wrap a specific credential model in `creds.Creds`:
 
 ```go
 credential := creds.Creds{
-    Id:        "my-service",
+    Id:        "550e8400-e29b-41d4-a716-446655440001",
     CredsType: constants.CT_Basic,
     Creds: creds.BasicCreds{
         Username: "YOUR_USERNAME",
@@ -97,7 +97,7 @@ credential := creds.Creds{
 errs := services.SetCreds([]creds.Creds{credential}, false)
 ```
 
-Use a stable, unique `Id`; `MakeApiCall` looks up credentials by that ID. `SetCreds` validates each credential and returns validation errors, or `nil` if all entries are valid.
+`Id` must be a GUID/UUID in the standard 36-character format, for example `550e8400-e29b-41d4-a716-446655440000`. Generate a new GUID for each distinct credential record and keep it stable when updating that record. `MakeApiCall` looks up credentials by this ID. `SetCreds` validates each credential and returns validation errors, or `nil` if all entries are valid.
 
 For an API key, `creds.ApiKeyCreds.FieldName` is the header name for `AM_Header`, or the query parameter name for `AM_Query`. KipApi adds the key only if that header or query parameter is not already present.
 
@@ -107,7 +107,7 @@ For an API key, `creds.ApiKeyCreds.FieldName` is the header name for `AM_Header`
 
 ```go
 call := httpmodel.ApiCall{
-    CredsId:    "my-service",
+    CredsId:    "550e8400-e29b-41d4-a716-446655440001",
     AuthMethod: constants.AM_Header,
     Request: httpmodel.Request{
         Method:  "GET",
