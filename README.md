@@ -70,6 +70,14 @@ For example, OAuth 2.0 credentials are used to obtain an access token, which is 
 
 This separation allows authentication logic to remain independent from individual integrations.
 
+### Direct OAuth token functions
+
+The functions in `services/auth`, including `GetOAuthTokenByPassword` and `RefreshOAuthToken`, are available for direct use. They perform token requests and return credentials, but they do **not** update KipApi's in-memory credentials store.
+
+If you call `RefreshOAuthToken` directly for credentials already registered in KipApi, you are responsible for updating the stored credentials with the returned value, for example by calling `SetCreds`. Otherwise, the credentials in your application storage and KipApi's in-memory store may become out of sync. The same applies when obtaining new OAuth credentials directly: register or persist them as appropriate for your application.
+
+The standard `MakeApiCall` flow handles token refresh and updates KipApi's in-memory credentials automatically.
+
 ---
 
 ## Making a Request

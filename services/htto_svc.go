@@ -3,7 +3,7 @@ package services
 import (
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 	"github.com/Anton-Kiptsevich/KipApi/services/base"
-	"github.com/Anton-Kiptsevich/KipApi/utils"
+	"github.com/Anton-Kiptsevich/KipApi/internal/utils"
 )
 
 func MakeApiCall(call hm.ApiCall) (hm.Response, error) {

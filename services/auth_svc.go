@@ -13,8 +13,8 @@ import (
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 	auth "github.com/Anton-Kiptsevich/KipApi/services/auth"
-	"github.com/Anton-Kiptsevich/KipApi/storage"
-	"github.com/Anton-Kiptsevich/KipApi/utils"
+	"github.com/Anton-Kiptsevich/KipApi/internal/storage"
+	"github.com/Anton-Kiptsevich/KipApi/internal/utils"
 )
 
 var (
