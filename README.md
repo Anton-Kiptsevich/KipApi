@@ -74,21 +74,23 @@ This separation allows authentication logic to remain independent from individua
 
 ## Making a Request
 
-A request contains the information required to call an external API:
+An API call contains the HTTP request and the information required to authenticate it:
 
 ```go
-request := http.Request{
+call := http.ApiCall{
     CredsId:    "550e8400-e29b-41d4-a716-446655440000",
     AuthMethod: constants.AM_Bearer,
-    Method:     "GET",
-    BaseUrl:    "https://api.example.com",
-    Path:       "/users",
+    Request: http.Request{
+        Method:  "GET",
+        BaseUrl: "https://api.example.com",
+        Path:    "/users",
+    },
 }
 ```
 
-`CredsId` is a GUID that identifies the credentials to use for the request.
+`CredsId` identifies the credentials to use for the API call.
 
-KipApi handles the authentication and HTTP execution required to perform the request.
+KipApi handles the authentication and HTTP execution required to perform the call.
 
 The application receives the resulting HTTP status, headers, and body.
 

@@ -6,17 +6,17 @@ import (
 	"github.com/Anton-Kiptsevich/KipApi/utils"
 )
 
-func MakeApiCall(areq hm.AuthorizedRequest) (hm.Response, error) {
-	creds, err := GetCredsForRequest(areq.CredsId)
+func MakeApiCall(call hm.ApiCall) (hm.Response, error) {
+	creds, err := GetCredsForRequest(call.CredsId)
 	if err != nil {
 		return hm.Response{}, err
 	}
 
-	if err := utils.ValidateAuthMethod(areq.AuthMethod, creds.CredsType); err != nil {
+	if err := utils.ValidateAuthMethod(call.AuthMethod, creds.CredsType); err != nil {
 		return hm.Response{}, err
 	}
 
-	req, err := InitAuthorizationIfNeeded(areq)
+	req, err := InitAuthorizationIfNeeded(call)
 	if err != nil {
 		return hm.Response{}, err
 	}

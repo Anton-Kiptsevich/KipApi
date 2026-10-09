@@ -108,14 +108,14 @@ func GetCredsForRequest(credsId string) (creds.Creds, error) {
 	return updatedCreds, nil
 }
 
-func InitAuthorizationIfNeeded(req hm.AuthorizedRequest) (hm.Request, error) {
-	currentCreds, err := GetCredsForRequest(req.CredsId)
+func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
+	currentCreds, err := GetCredsForRequest(call.CredsId)
 	if err != nil {
-		return req.HttoRequest, err
+		return call.Request, err
 	}
-	if req.AuthMethod == constants.AM_MTLS {
-		if req.HttoRequest.TlsCert != nil {
-			return req.HttoRequest, nil
+	if call.AuthMethod == constants.AM_MTLS {
+		if call.Request.TlsCert != nil {
+			return call.Request, nil
 		}
 
 		mtls, ok := currentCreds.Creds.(creds.MTLSCreds)
@@ -128,17 +128,17 @@ func InitAuthorizationIfNeeded(req hm.AuthorizedRequest) (hm.Request, error) {
 			panic("Invalid mtls.ClientCert/mtls.ClientKey pair")
 		}
 
-		req.HttoRequest.TlsCert = &cert
-		return req.HttoRequest, nil
+		call.Request.TlsCert = &cert
+		return call.Request, nil
 	}
 
-	if req.AuthMethod == constants.AM_Query {
+	if call.AuthMethod == constants.AM_Query {
 		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
 		if !ok {
 			panic("Auth Method/Creds Type discrepancy")
 		}
 
-		u, err := url.Parse(req.HttoRequest.BaseUrl + req.HttoRequest.Path)
+		u, err := url.Parse(call.Request.BaseUrl + call.Request.Path)
 		if err != nil {
 			panic("Invalid request URL")
 		}
@@ -146,23 +146,23 @@ func InitAuthorizationIfNeeded(req hm.AuthorizedRequest) (hm.Request, error) {
 		if _, exists := q[apiKey.FieldName]; !exists {
 			q.Set(apiKey.FieldName, apiKey.ApiKey)
 			u.RawQuery = q.Encode()
-			req.HttoRequest.BaseUrl = u.Scheme + "://" + u.Host
-			req.HttoRequest.Path = u.RequestURI()
+			call.Request.BaseUrl = u.Scheme + "://" + u.Host
+			call.Request.Path = u.RequestURI()
 		}
 
-		return req.HttoRequest, nil
+		return call.Request, nil
 	}
 
 	headerName := "Authorization"
 	headerValue := ""
 
-	for _, h := range req.HttoRequest.Headers {
+	for _, h := range call.Request.Headers {
 		if strings.EqualFold(h.Name, headerName) {
-			return req.HttoRequest, nil
+			return call.Request, nil
 		}
 	}
 
-	switch req.AuthMethod {
+	switch call.AuthMethod {
 	case constants.AM_Basic:
 		basic, ok := currentCreds.Creds.(creds.BasicCreds)
 		if !ok {
@@ -198,16 +198,16 @@ func InitAuthorizationIfNeeded(req hm.AuthorizedRequest) (hm.Request, error) {
 		headerValue = apiKey.ApiKey
 
 	case constants.AM_Digest:
-		headerValue, err = auth.GetDigestAuthorization(req.HttoRequest, currentCreds)
+		headerValue, err = auth.GetDigestAuthorization(call.Request, currentCreds)
 		if err != nil {
-			return req.HttoRequest, err
+			return call.Request, err
 		}
 	}
 
-	headers := make([]hm.Header, 0, len(req.HttoRequest.Headers)+1)
-	headers = append(headers, req.HttoRequest.Headers...)
+	headers := make([]hm.Header, 0, len(call.Request.Headers)+1)
+	headers = append(headers, call.Request.Headers...)
 	headers = append(headers, hm.Header{Name: headerName, Value: &headerValue})
-	req.HttoRequest.Headers = headers
+	call.Request.Headers = headers
 
-	return req.HttoRequest, nil
+	return call.Request, nil
 }
