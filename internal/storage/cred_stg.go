@@ -13,33 +13,41 @@ type CredsForSync struct {
 	Version uint64
 }
 
+type syncState struct {
+	version         uint64
+	isSyncInProcess bool
+}
+
 type CredsStg struct {
 	credsStg     map[string]creds.Creds
-	syncVersions map[string]uint64
+	syncVersions map[string]syncState
 	credsMux     sync.RWMutex
 }
 
 func (cs *CredsStg) InitCredsStg() CredsStg {
 	return CredsStg{
 		credsStg:     make(map[string]creds.Creds),
-		syncVersions: make(map[string]uint64),
+		syncVersions: make(map[string]syncState),
 	}
 }
 
+// GetCredsForSync returns dirty credentials that are not already being synced
+// and marks each returned credential as having a sync in progress.
 func (cs *CredsStg) GetCredsForSync() map[string]CredsForSync {
-	cs.credsMux.RLock()
-	defer cs.credsMux.RUnlock()
+	cs.credsMux.Lock()
+	defer cs.credsMux.Unlock()
 
 	result := make(map[string]CredsForSync)
-	for id, version := range cs.syncVersions {
-		// Odd versions are dirty; even versions are clean. Keeping the
-		// version after confirmation prevents an old confirmation from
-		// matching a later update (an ABA problem).
-		if version%2 == 1 {
-			result[id] = CredsForSync{
-				Creds:   cs.credsStg[id],
-				Version: version,
-			}
+	for id, state := range cs.syncVersions {
+		if state.isSyncInProcess {
+			continue
+		}
+
+		state.isSyncInProcess = true
+		cs.syncVersions[id] = state
+		result[id] = CredsForSync{
+			Creds:   cs.credsStg[id],
+			Version: state.version,
 		}
 	}
 	return result
@@ -62,31 +70,23 @@ func (cs *CredsStg) SetCreds(credsId string, c creds.Creds, markAsDirty bool) {
 		return
 	}
 
-	version := cs.syncVersions[credsId]
-	if version%2 == 0 {
-		// A clean credential becomes dirty.
-		version++
-	} else {
-		// It was already dirty, so invalidate any snapshot already in flight.
-		version += 2
-	}
-	cs.syncVersions[credsId] = version
+	state := cs.syncVersions[credsId]
+	state.version++
+	state.isSyncInProcess = false
+	cs.syncVersions[credsId] = state
 }
 
-// MarkCredsSynced confirms only the exact version returned by GetCredsForSync.
-// It returns false when the credential is missing, already clean, or changed
-// after the sync snapshot was taken.
+// MarkCredsSynced removes sync state only when the confirmed snapshot is still
+// current and a sync for that version is marked as in progress.
 func (cs *CredsStg) MarkCredsSynced(credsId string, version uint64) bool {
 	cs.credsMux.Lock()
 	defer cs.credsMux.Unlock()
 
-	currentVersion, ok := cs.syncVersions[credsId]
-	if !ok || currentVersion != version || currentVersion%2 == 0 {
+	state, ok := cs.syncVersions[credsId]
+	if !ok || state.version != version || !state.isSyncInProcess {
 		return false
 	}
 
-	// Advance to an even (clean) version rather than deleting the entry, so
-	// future updates never reuse a version from an earlier sync attempt.
-	cs.syncVersions[credsId] = currentVersion + 1
+	delete(cs.syncVersions, credsId)
 	return true
 }
