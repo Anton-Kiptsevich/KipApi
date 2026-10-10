@@ -6,13 +6,6 @@ import (
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 )
 
-// CredsForSync contains a credential snapshot and the version that must be
-// supplied when confirming that snapshot was persisted.
-type CredsForSync struct {
-	Creds   creds.Creds
-	Version uint64
-}
-
 type syncState struct {
 	version         uint64
 	isSyncInProcess bool
@@ -33,11 +26,11 @@ func (cs *CredsStg) InitCredsStg() CredsStg {
 
 // GetCredsForSync returns dirty credentials that are not already being synced
 // and marks each returned credential as having a sync in progress.
-func (cs *CredsStg) GetCredsForSync() map[string]CredsForSync {
+func (cs *CredsStg) GetCredsForSync() map[string]creds.CredsForSync {
 	cs.credsMux.Lock()
 	defer cs.credsMux.Unlock()
 
-	result := make(map[string]CredsForSync)
+	result := make(map[string]creds.CredsForSync)
 	for id, state := range cs.syncVersions {
 		if state.isSyncInProcess {
 			continue
@@ -45,7 +38,7 @@ func (cs *CredsStg) GetCredsForSync() map[string]CredsForSync {
 
 		state.isSyncInProcess = true
 		cs.syncVersions[id] = state
-		result[id] = CredsForSync{
+		result[id] = creds.CredsForSync{
 			Creds:   cs.credsStg[id],
 			Version: state.version,
 		}

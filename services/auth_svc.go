@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/Anton-Kiptsevich/KipApi/constants"
+	"github.com/Anton-Kiptsevich/KipApi/internal/storage"
+	"github.com/Anton-Kiptsevich/KipApi/internal/utils"
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 	auth "github.com/Anton-Kiptsevich/KipApi/services/auth"
-	"github.com/Anton-Kiptsevich/KipApi/internal/storage"
-	"github.com/Anton-Kiptsevich/KipApi/internal/utils"
 )
 
 var (
@@ -46,7 +46,7 @@ func SetCreds(credsList []creds.Creds, markAsDirty bool) []error {
 	return nil
 }
 
-func GetCredsForSync() map[string]storage.CredsForSync {
+func GetCredsForSync() map[string]creds.CredsForSync {
 	return credsStg.GetCredsForSync()
 }
 
