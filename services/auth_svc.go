@@ -46,13 +46,13 @@ func SetCreds(credsList []creds.Creds, markAsDirty bool) []error {
 	return nil
 }
 
-func GetCredsForSync() map[string]creds.Creds {
+func GetCredsForSync() map[string]storage.CredsForSync {
 	return credsStg.GetCredsForSync()
 }
 
-func MarkCredsSynced(credsId string) error {
-	if !credsStg.MarkCredsSynced(credsId) {
-		return fmt.Errorf("credentials with id %s not found", credsId)
+func MarkCredsSynced(credsId string, version uint64) error {
+	if !credsStg.MarkCredsSynced(credsId, version) {
+		return fmt.Errorf("credentials with id %s were not synced: missing, outdated version, or no sync in progress", credsId)
 	}
 	return nil
 }
