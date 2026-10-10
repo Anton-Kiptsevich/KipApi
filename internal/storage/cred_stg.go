@@ -2,37 +2,44 @@ package storage
 
 import (
 	"sync"
-	"time"
 
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 )
 
-type credsSyncState struct {
-	lastUpdatedAt time.Time
-	lastSyncedAt  time.Time
+// CredsForSync contains a credential snapshot and the version that must be
+// supplied when confirming that snapshot was persisted.
+type CredsForSync struct {
+	Creds   creds.Creds
+	Version uint64
 }
 
 type CredsStg struct {
-	credsStg map[string]creds.Creds
-	syncStg  map[string]credsSyncState
-	credsMux sync.RWMutex
+	credsStg     map[string]creds.Creds
+	syncVersions map[string]uint64
+	credsMux     sync.RWMutex
 }
 
 func (cs *CredsStg) InitCredsStg() CredsStg {
 	return CredsStg{
-		credsStg: make(map[string]creds.Creds),
-		syncStg:  make(map[string]credsSyncState),
+		credsStg:     make(map[string]creds.Creds),
+		syncVersions: make(map[string]uint64),
 	}
 }
 
-func (cs *CredsStg) GetCredsForSync() map[string]creds.Creds {
+func (cs *CredsStg) GetCredsForSync() map[string]CredsForSync {
 	cs.credsMux.RLock()
 	defer cs.credsMux.RUnlock()
 
-	result := make(map[string]creds.Creds)
-	for id, state := range cs.syncStg {
-		if state.lastUpdatedAt.After(state.lastSyncedAt) {
-			result[id] = cs.credsStg[id]
+	result := make(map[string]CredsForSync)
+	for id, version := range cs.syncVersions {
+		// Odd versions are dirty; even versions are clean. Keeping the
+		// version after confirmation prevents an old confirmation from
+		// matching a later update (an ABA problem).
+		if version%2 == 1 {
+			result[id] = CredsForSync{
+				Creds:   cs.credsStg[id],
+				Version: version,
+			}
 		}
 	}
 	return result
@@ -50,34 +57,36 @@ func (cs *CredsStg) SetCreds(credsId string, c creds.Creds, markAsDirty bool) {
 	cs.credsMux.Lock()
 	defer cs.credsMux.Unlock()
 
-	now := time.Now()
 	cs.credsStg[credsId] = c
-
-	state, exists := cs.syncStg[credsId]
-	if !exists {
-		state.lastUpdatedAt = now
-		if markAsDirty {
-			state.lastSyncedAt = time.Time{}
-		} else {
-			state.lastSyncedAt = now
-		}
-	} else if markAsDirty {
-		state.lastUpdatedAt = now
+	if !markAsDirty {
+		return
 	}
 
-	cs.syncStg[credsId] = state
+	version := cs.syncVersions[credsId]
+	if version%2 == 0 {
+		// A clean credential becomes dirty.
+		version++
+	} else {
+		// It was already dirty, so invalidate any snapshot already in flight.
+		version += 2
+	}
+	cs.syncVersions[credsId] = version
 }
 
-func (cs *CredsStg) MarkCredsSynced(credsId string) bool {
+// MarkCredsSynced confirms only the exact version returned by GetCredsForSync.
+// It returns false when the credential is missing, already clean, or changed
+// after the sync snapshot was taken.
+func (cs *CredsStg) MarkCredsSynced(credsId string, version uint64) bool {
 	cs.credsMux.Lock()
 	defer cs.credsMux.Unlock()
 
-	state, ok := cs.syncStg[credsId]
-	if !ok {
+	currentVersion, ok := cs.syncVersions[credsId]
+	if !ok || currentVersion != version || currentVersion%2 == 0 {
 		return false
 	}
 
-	state.lastSyncedAt = state.lastUpdatedAt
-	cs.syncStg[credsId] = state
+	// Advance to an even (clean) version rather than deleting the entry, so
+	// future updates never reuse a version from an earlier sync attempt.
+	cs.syncVersions[credsId] = currentVersion + 1
 	return true
 }
