@@ -38,6 +38,9 @@ func TestCredsStorageReadAndSyncLifecycle(t *testing.T) {
 	if token := first.Creds.Creds.(creds.BearerCreds).Token; token != "first" {
 		t.Fatalf("pending token = %q, want first", token)
 	}
+	if pending := stg.GetCredsForSync(); len(pending) != 0 {
+		t.Fatalf("GetCredsForSync() returned %d credentials while sync was in progress, want 0", len(pending))
+	}
 	if !stg.MarkCredsSynced("credential-1", first.Version) {
 		t.Fatal("MarkCredsSynced() rejected the current version")
 	}
@@ -84,5 +87,46 @@ func TestSetCredsCanLoadAlreadySyncedCredential(t *testing.T) {
 	stg.SetCreds("credential-1", newTestCreds("loaded"), false)
 	if pending := stg.GetCredsForSync(); len(pending) != 0 {
 		t.Fatalf("loaded credential unexpectedly needs sync: %#v", pending)
+	}
+}
+
+func TestSetCredsDuringSyncAllowsNewSnapshotAndRejectsOldConfirmation(t *testing.T) {
+	var stg CredsStg
+	stg = stg.InitCredsStg()
+
+	stg.SetCreds("credential-1", newTestCreds("first"), true)
+	first := stg.GetCredsForSync()["credential-1"]
+
+	// A new update invalidates the in-progress marker for the old snapshot.
+	stg.SetCreds("credential-1", newTestCreds("second"), true)
+	secondBatch := stg.GetCredsForSync()
+	second, ok := secondBatch["credential-1"]
+	if len(secondBatch) != 1 || !ok {
+		t.Fatalf("GetCredsForSync() did not return the newer update: %#v", secondBatch)
+	}
+	if second.Version != first.Version+1 {
+		t.Fatalf("new snapshot version = %d, want %d", second.Version, first.Version+1)
+	}
+	if stg.MarkCredsSynced("credential-1", first.Version) {
+		t.Fatal("MarkCredsSynced() accepted an outdated snapshot")
+	}
+	if !stg.MarkCredsSynced("credential-1", second.Version) {
+		t.Fatal("MarkCredsSynced() rejected the latest snapshot")
+	}
+}
+
+func TestSetCredsWithoutDirtyFlagDoesNotResetSyncState(t *testing.T) {
+	var stg CredsStg
+	stg = stg.InitCredsStg()
+
+	stg.SetCreds("credential-1", newTestCreds("first"), true)
+	first := stg.GetCredsForSync()["credential-1"]
+	stg.SetCreds("credential-1", newTestCreds("loaded"), false)
+
+	if pending := stg.GetCredsForSync(); len(pending) != 0 {
+		t.Fatalf("GetCredsForSync() returned %d credentials while sync was in progress, want 0", len(pending))
+	}
+	if !stg.MarkCredsSynced("credential-1", first.Version) {
+		t.Fatal("SetCreds(..., false) unexpectedly reset sync state")
 	}
 }
