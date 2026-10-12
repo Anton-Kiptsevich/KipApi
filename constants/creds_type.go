@@ -7,4 +7,5 @@ const (
 	CT_ApiKey  = "API Key"
 	CT_Digest  = "Digest"
 	CT_MTLS    = "mTLS"
+	CT_HMAC    = "HMAC"
 )

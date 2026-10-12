@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/url"
+	"slices"
 
 	"github.com/Anton-Kiptsevich/KipApi/constants"
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
@@ -80,6 +81,26 @@ func ValidateCreds(id string, c creds.Creds) error {
 		}
 		if _, err := tls.X509KeyPair(mtls.ClientCert, mtls.ClientKey); err != nil {
 			return fmt.Errorf("%s: MTLSCreds contains invalid ClientCert/ClientKey pair: %w", id, err)
+		}
+	case constants.CT_HMAC:
+		hmac, ok := c.Creds.(creds.HMACCreds)
+		if !ok { 
+			return fmt.Errorf("%s: CredsType %s requires HMACCreds", id, c.CredsType) 
+		}
+		if len(hmac.SecretKey) == 0 || len(hmac.SignatureHeaderName) == 0 || len(hmac.PartsSources) == 0 {
+			return fmt.Errorf("%s: HMACCreds must contain SecretKey, SignatureHeaderName and PartsSources", id) 
+		}
+		if hmac.SignatureEncoding != "base64" && hmac.SignatureEncoding != "hex" {
+			return fmt.Errorf("%s: HMACCreds SignatureEncoding method not supported", id) 
+		}
+		if !slices.Contains([]string{ constants.HA_SHA1, constants.HA_SHA256, constants.HA_SHA384, constants.HA_SHA512 }, hmac.Algorithm) {
+			return fmt.Errorf("%s: HMACCreds Algorithm not supported", id) 
+		}
+		placeholderMatches := GetAllSignaturePlaceholders(hmac.CanonicalizedSignature)
+		for _, tm := range placeholderMatches {
+			if !slices.Contains([]string{ "{body}", "{currentTimeStamp}", "{header:name}", "{method}", "{path}" }, tm) {
+				return fmt.Errorf("%s: HMACCreds Signature Token not supported", id) 
+			}
 		}
 	default:
 		return fmt.Errorf("%s: Unknown CredsType %s", id, c.CredsType)
