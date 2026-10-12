@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Anton-Kiptsevich/KipApi/constants"
+	"github.com/Anton-Kiptsevich/KipApi/internal/utils"
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 )
@@ -99,7 +100,6 @@ func ValidateCreds(id string, c creds.Creds) error {
 		}
 
 		for _, placeholder := range GetAllSignaturePlaceholders(hmac.CanonicalizedSignature) {
-			normalized := normalizePlaceholder(placeholder)
 			if !slices.Contains([]string{
 				constants.HP_Method,
 				constants.HP_Url,
@@ -112,7 +112,7 @@ func ValidateCreds(id string, c creds.Creds) error {
 				constants.HP_Body,
 				constants.HP_ContentLength,
 				constants.HP_Header,
-			}, normalized) {
+			}, utils.NormalizePlaceholder(placeholder)) {
 				return fmt.Errorf("%s: HMACCreds Signature Token not supported: %s", id, placeholder)
 			}
 		}
@@ -122,8 +122,6 @@ func ValidateCreds(id string, c creds.Creds) error {
 	return nil
 }
 
-// ValidateHMACSignatureRequest checks that every header referenced by the
-// canonicalized signature is present in the request model.
 func ValidateHMACSignatureRequest(signature string, req hm.Request) error {
 	for _, placeholder := range GetAllSignaturePlaceholders(signature) {
 		if !strings.HasPrefix(placeholder, "{header:") || !strings.HasSuffix(placeholder, "}") {
@@ -147,17 +145,6 @@ func ValidateHMACSignatureRequest(signature string, req hm.Request) error {
 		}
 	}
 	return nil
-}
-
-// normalizePlaceholder replaces the wildcard value after the first colon
-// with ##, allowing wildcard placeholders to use the same constant-based
-// validation as fixed placeholders.
-func normalizePlaceholder(placeholder string) string {
-	colon := strings.IndexByte(placeholder, ':')
-	if colon == -1 || !strings.HasSuffix(placeholder, "}") {
-		return placeholder
-	}
-	return placeholder[:colon+1] + "##}"
 }
 
 func ValidateAuthMethod(authMethod, credsType string) error {
