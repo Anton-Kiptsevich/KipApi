@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strings"
 
 	"github.com/Anton-Kiptsevich/KipApi/constants"
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
@@ -33,73 +34,87 @@ func ValidateCreds(id string, c creds.Creds) error {
 	switch c.CredsType {
 	case constants.CT_Basic:
 		basic, ok := c.Creds.(creds.BasicCreds)
-		if !ok { 
-			return fmt.Errorf("%s: CredsType %s requires BasicCreds", id, c.CredsType) 
+		if !ok {
+			return fmt.Errorf("%s: CredsType %s requires BasicCreds", id, c.CredsType)
 		}
-		if basic.Username == "" || basic.Password == "" { 
-			return fmt.Errorf("%s: BasicCreds must contain Username and Password", id) 
+		if basic.Username == "" || basic.Password == "" {
+			return fmt.Errorf("%s: BasicCreds must contain Username and Password", id)
 		}
 	case constants.CT_Bearer:
 		bearer, ok := c.Creds.(creds.BearerCreds)
-		if !ok { 
-			return fmt.Errorf("%s: CredsType %s requires BearerCreds", id, c.CredsType) 
+		if !ok {
+			return fmt.Errorf("%s: CredsType %s requires BearerCreds", id, c.CredsType)
 		}
-		if bearer.Token == "" { 
-			return fmt.Errorf("%s: BearerCreds must contain Token", id) 
+		if bearer.Token == "" {
+			return fmt.Errorf("%s: BearerCreds must contain Token", id)
 		}
 	case constants.CT_OAuth2:
 		oauth2, ok := c.Creds.(creds.OAuth2Creds)
-		if !ok { 
-			return fmt.Errorf("%s: CredsType %s requires OAuth2Creds", id, c.CredsType) 
+		if !ok {
+			return fmt.Errorf("%s: CredsType %s requires OAuth2Creds", id, c.CredsType)
 		}
 		if oauth2.AccessToken == "" || oauth2.RefreshToken == "" || oauth2.TokenURL == "" || oauth2.ClientID == "" || oauth2.ClientSecret == "" || oauth2.ExpirationDate.IsZero() {
 			return fmt.Errorf("%s: OAuth2Creds must contain AccessToken, RefreshToken, ExpirationDate, TokenURL, ClientID and ClientSecret", id)
 		}
 	case constants.CT_ApiKey:
 		apiKey, ok := c.Creds.(creds.ApiKeyCreds)
-		if !ok { 
-			return fmt.Errorf("%s: CredsType %s requires ApiKeyCreds", id, c.CredsType) 
+		if !ok {
+			return fmt.Errorf("%s: CredsType %s requires ApiKeyCreds", id, c.CredsType)
 		}
-		if apiKey.ApiKey == "" || apiKey.FieldName == "" { 
-			return fmt.Errorf("%s: ApiKeyCreds must contain ApiKey and FieldName", id) 
+		if apiKey.ApiKey == "" || apiKey.FieldName == "" {
+			return fmt.Errorf("%s: ApiKeyCreds must contain ApiKey and FieldName", id)
 		}
 	case constants.CT_Digest:
 		digest, ok := c.Creds.(creds.DigestCreds)
-		if !ok { 
-			return fmt.Errorf("%s: CredsType %s requires DigestCreds", id, c.CredsType) 
+		if !ok {
+			return fmt.Errorf("%s: CredsType %s requires DigestCreds", id, c.CredsType)
 		}
-		if digest.Username == "" || digest.Password == "" { 
-			return fmt.Errorf("%s: DigestCreds must contain Username and Password", id) 
+		if digest.Username == "" || digest.Password == "" {
+			return fmt.Errorf("%s: DigestCreds must contain Username and Password", id)
 		}
 	case constants.CT_MTLS:
 		mtls, ok := c.Creds.(creds.MTLSCreds)
-		if !ok { 
-			return fmt.Errorf("%s: CredsType %s requires MTLSCreds", id, c.CredsType) 
+		if !ok {
+			return fmt.Errorf("%s: CredsType %s requires MTLSCreds", id, c.CredsType)
 		}
-		if len(mtls.ClientCert) == 0 || len(mtls.ClientKey) == 0 { 
-			return fmt.Errorf("%s: MTLSCreds must contain ClientCert and ClientKey", id) 
+		if len(mtls.ClientCert) == 0 || len(mtls.ClientKey) == 0 {
+			return fmt.Errorf("%s: MTLSCreds must contain ClientCert and ClientKey", id)
 		}
 		if _, err := tls.X509KeyPair(mtls.ClientCert, mtls.ClientKey); err != nil {
 			return fmt.Errorf("%s: MTLSCreds contains invalid ClientCert/ClientKey pair: %w", id, err)
 		}
 	case constants.CT_HMAC:
 		hmac, ok := c.Creds.(creds.HMACCreds)
-		if !ok { 
-			return fmt.Errorf("%s: CredsType %s requires HMACCreds", id, c.CredsType) 
+		if !ok {
+			return fmt.Errorf("%s: CredsType %s requires HMACCreds", id, c.CredsType)
 		}
-		if len(hmac.SecretKey) == 0 || len(hmac.SignatureHeaderName) == 0 || len(hmac.PartsSources) == 0 {
-			return fmt.Errorf("%s: HMACCreds must contain SecretKey, SignatureHeaderName and PartsSources", id) 
+		if hmac.SecretKey == "" || hmac.SignatureHeaderName == "" || hmac.CanonicalizedSignature == "" {
+			return fmt.Errorf("%s: HMACCreds must contain SecretKey, SignatureHeaderName and CanonicalizedSignature", id)
 		}
 		if hmac.SignatureEncoding != "base64" && hmac.SignatureEncoding != "hex" {
-			return fmt.Errorf("%s: HMACCreds SignatureEncoding method not supported", id) 
+			return fmt.Errorf("%s: HMACCreds SignatureEncoding method not supported", id)
 		}
-		if !slices.Contains([]string{ constants.HA_SHA1, constants.HA_SHA256, constants.HA_SHA384, constants.HA_SHA512 }, hmac.Algorithm) {
-			return fmt.Errorf("%s: HMACCreds Algorithm not supported", id) 
+		if !slices.Contains([]string{constants.HA_SHA1, constants.HA_SHA256, constants.HA_SHA384, constants.HA_SHA512}, hmac.Algorithm) {
+			return fmt.Errorf("%s: HMACCreds Algorithm not supported", id)
 		}
-		placeholderMatches := GetAllSignaturePlaceholders(hmac.CanonicalizedSignature)
-		for _, tm := range placeholderMatches {
-			if !slices.Contains([]string{ "{body}", "{currentTimeStamp}", "{header:name}", "{method}", "{path}" }, tm) {
-				return fmt.Errorf("%s: HMACCreds Signature Token not supported", id) 
+
+		for _, placeholder := range GetAllSignaturePlaceholders(hmac.CanonicalizedSignature) {
+			if isHeaderPlaceholder(placeholder) {
+				continue
+			}
+			if !slices.Contains([]string{
+				constants.HP_Method,
+				constants.HP_Url,
+				constants.HP_BaseUrl,
+				constants.HP_Scheme,
+				constants.HP_Host,
+				constants.HP_Port,
+				constants.HP_Path,
+				constants.HP_Query,
+				constants.HP_Body,
+				constants.HP_ContentLength,
+			}, placeholder) {
+				return fmt.Errorf("%s: HMACCreds Signature Token not supported: %s", id, placeholder)
 			}
 		}
 	default:
@@ -108,27 +123,54 @@ func ValidateCreds(id string, c creds.Creds) error {
 	return nil
 }
 
+func isHeaderPlaceholder(placeholder string) bool {
+	const marker = "##"
+	prefix, suffix, ok := strings.Cut(constants.HP_Header, marker)
+	if !ok || !strings.HasPrefix(placeholder, prefix) || !strings.HasSuffix(placeholder, suffix) {
+		return false
+	}
+
+	headerName := strings.TrimSuffix(strings.TrimPrefix(placeholder, prefix), suffix)
+	if headerName == "" {
+		return false
+	}
+
+	for _, r := range headerName {
+		if !isHTTPTokenChar(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func isHTTPTokenChar(r rune) bool {
+	if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+		return true
+	}
+	return strings.ContainsRune("!#$%&'*+-.^_`|~", r)
+}
+
 func ValidateAuthMethod(authMethod, credsType string) error {
 	switch authMethod {
 	case constants.AM_Basic:
-		if credsType != constants.CT_Basic { 
-			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_Basic) 
+		if credsType != constants.CT_Basic {
+			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_Basic)
 		}
 	case constants.AM_Bearer:
-		if credsType != constants.CT_Bearer && credsType != constants.CT_OAuth2 { 
-			return fmt.Errorf("AuthMethod %s requires Bearer or OAuth2 credentials", authMethod) 
+		if credsType != constants.CT_Bearer && credsType != constants.CT_OAuth2 {
+			return fmt.Errorf("AuthMethod %s requires Bearer or OAuth2 credentials", authMethod)
 		}
 	case constants.AM_Header, constants.AM_Query:
-		if credsType != constants.CT_ApiKey { 
-			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_ApiKey) 
+		if credsType != constants.CT_ApiKey {
+			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_ApiKey)
 		}
 	case constants.AM_Digest:
-		if credsType != constants.CT_Digest { 
-			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_Digest) 
+		if credsType != constants.CT_Digest {
+			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_Digest)
 		}
 	case constants.AM_MTLS:
-		if credsType != constants.CT_MTLS { 
-			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_MTLS) 
+		if credsType != constants.CT_MTLS {
+			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_MTLS)
 		}
 	default:
 		return fmt.Errorf("Unknown AuthMethod %s", authMethod)
