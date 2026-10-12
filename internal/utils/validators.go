@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/Anton-Kiptsevich/KipApi/constants"
-	"github.com/Anton-Kiptsevich/KipApi/internal/utils"
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 )
@@ -112,7 +111,7 @@ func ValidateCreds(id string, c creds.Creds) error {
 				constants.HP_Body,
 				constants.HP_ContentLength,
 				constants.HP_Header,
-			}, utils.NormalizePlaceholder(placeholder)) {
+			}, NormalizePlaceholder(placeholder)) {
 				return fmt.Errorf("%s: HMACCreds Signature Token not supported: %s", id, placeholder)
 			}
 		}
