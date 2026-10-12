@@ -12,8 +12,5 @@ const (
 	HP_Query         = "{query}"
 	HP_Body          = "{body}"
 	HP_ContentLength = "{contentLength}"
-
-	// Header placeholders use the form "{header:Name}".
-	HP_HeaderPrefix = "{header:"
-	HP_PlaceholderEnd = "}"
+	HP_Header        = "{header:##}"
 )
