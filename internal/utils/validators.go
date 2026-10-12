@@ -99,9 +99,7 @@ func ValidateCreds(id string, c creds.Creds) error {
 		}
 
 		for _, placeholder := range GetAllSignaturePlaceholders(hmac.CanonicalizedSignature) {
-			if isHeaderPlaceholder(placeholder) {
-				continue
-			}
+			normalized := normalizePlaceholder(placeholder)
 			if !slices.Contains([]string{
 				constants.HP_Method,
 				constants.HP_Url,
@@ -113,7 +111,8 @@ func ValidateCreds(id string, c creds.Creds) error {
 				constants.HP_Query,
 				constants.HP_Body,
 				constants.HP_ContentLength,
-			}, placeholder) {
+				constants.HP_Header,
+			}, normalized) {
 				return fmt.Errorf("%s: HMACCreds Signature Token not supported: %s", id, placeholder)
 			}
 		}
@@ -123,31 +122,42 @@ func ValidateCreds(id string, c creds.Creds) error {
 	return nil
 }
 
-func isHeaderPlaceholder(placeholder string) bool {
-	const marker = "##"
-	prefix, suffix, ok := strings.Cut(constants.HP_Header, marker)
-	if !ok || !strings.HasPrefix(placeholder, prefix) || !strings.HasSuffix(placeholder, suffix) {
-		return false
-	}
+// ValidateHMACSignatureRequest checks that every header referenced by the
+// canonicalized signature is present in the request model.
+func ValidateHMACSignatureRequest(signature string, req hm.Request) error {
+	for _, placeholder := range GetAllSignaturePlaceholders(signature) {
+		if !strings.HasPrefix(placeholder, "{header:") || !strings.HasSuffix(placeholder, "}") {
+			continue
+		}
 
-	headerName := strings.TrimSuffix(strings.TrimPrefix(placeholder, prefix), suffix)
-	if headerName == "" {
-		return false
-	}
+		headerName := strings.TrimSuffix(strings.TrimPrefix(placeholder, "{header:"), "}")
+		if headerName == "" {
+			return fmt.Errorf("HMAC signature references an empty header name")
+		}
 
-	for _, r := range headerName {
-		if !isHTTPTokenChar(r) {
-			return false
+		found := false
+		for _, header := range req.Headers {
+			if strings.EqualFold(header.Name, headerName) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("HMAC signature references header %s, but it is missing from Request", headerName)
 		}
 	}
-	return true
+	return nil
 }
 
-func isHTTPTokenChar(r rune) bool {
-	if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
-		return true
+// normalizePlaceholder replaces the wildcard value after the first colon
+// with ##, allowing wildcard placeholders to use the same constant-based
+// validation as fixed placeholders.
+func normalizePlaceholder(placeholder string) string {
+	colon := strings.IndexByte(placeholder, ':')
+	if colon == -1 || !strings.HasSuffix(placeholder, "}") {
+		return placeholder
 	}
-	return strings.ContainsRune("!#$%&'*+-.^_`|~", r)
+	return placeholder[:colon+1] + "##}"
 }
 
 func ValidateAuthMethod(authMethod, credsType string) error {

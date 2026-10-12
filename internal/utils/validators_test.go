@@ -9,6 +9,46 @@ import (
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 )
 
+func TestNormalizePlaceholder(t *testing.T) {
+	tests := []struct {
+		name, input, want string
+	}{
+		{"fixed placeholder", constants.HP_Method, constants.HP_Method, constants.HP_Method},
+		{"header placeholder", "{header:Authorization}", constants.HP_Header, constants.HP_Header},
+		{"future wildcard placeholder", "{future:anything}", "{future:##}", "{future:##}"},
+		{"no colon", "{method}", "{method}", "{method}"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizePlaceholder(tt.input); got != tt.want {
+				t.Fatalf("normalizePlaceholder(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateHMACSignatureRequest(t *testing.T) {
+	value := "present"
+	tests := []struct {
+		name, signature string
+		headers []hm.Header
+		wantErr bool
+	}{
+		{"header present", "{header:Authorization}", []hm.Header{{Name: "authorization", Value: &value}}, false},
+		{"header missing", "{header:Authorization}", nil, true},
+		{"empty header name", "{header:}", nil, true},
+		{"no header placeholder", "{method}", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateHMACSignatureRequest(tt.signature, hm.Request{Headers: tt.headers})
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ValidateHMACSignatureRequest() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestValidateHttpRequestHeaders(t *testing.T) {
 	value := "application/json"
 	tests := []struct {
@@ -48,6 +88,7 @@ func TestValidateCreds(t *testing.T) {
 		{"bearer", creds.Creds{CredsType: constants.CT_Bearer, Creds: creds.BearerCreds{Token: "token"}}},
 		{"api key", creds.Creds{CredsType: constants.CT_ApiKey, Creds: creds.ApiKeyCreds{ApiKey: "key", FieldName: "X-API-Key"}}},
 		{"oauth2", creds.Creds{CredsType: constants.CT_OAuth2, Creds: creds.OAuth2Creds{AccessToken: "access", RefreshToken: "refresh", ExpirationDate: time.Now().Add(time.Hour), TokenURL: "https://example.com/token", ClientID: "client", ClientSecret: "secret"}}},
+		{"hmac with header placeholder", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", CanonicalizedSignature: "{method}:{header:X-Request-Id}"}}},
 	}
 	for _, tt := range valid {
 		t.Run(tt.name, func(t *testing.T) {
@@ -64,6 +105,7 @@ func TestValidateCreds(t *testing.T) {
 		{"empty bearer token", creds.Creds{CredsType: constants.CT_Bearer, Creds: creds.BearerCreds{}}},
 		{"empty api key field name", creds.Creds{CredsType: constants.CT_ApiKey, Creds: creds.ApiKeyCreds{ApiKey: "key"}}},
 		{"unknown type", creds.Creds{CredsType: "unknown", Creds: struct{}{}}},
+		{"unknown hmac placeholder", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", CanonicalizedSignature: "{future:anything}"}}},
 	}
 	for _, tt := range invalid {
 		t.Run(tt.name, func(t *testing.T) {
@@ -96,7 +138,7 @@ func TestValidateAuthMethod(t *testing.T) {
 	for _, tt := range invalid {
 		t.Run(tt.method+"/"+tt.credsType, func(t *testing.T) {
 			if err := ValidateAuthMethod(tt.method, tt.credsType); err == nil {
-				t.Fatal("ValidateAuthMethod() error = nil, want validation error")
+				t.Fatalf("ValidateAuthMethod() error = nil, want validation error")
 			}
 		})
 	}
