@@ -19,6 +19,8 @@ import (
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 )
 
+var signaturePlacesolderRegexp = regexp.MustCompile(constants.SP_REGEXP_PATTERN)
+
 func GetHMACSignature(req hm.Request, hmacCreds creds.HMACCreds) (string, error) {
 	canonical, err := buildCanonicalSignature(req, hmacCreds)
 	if err != nil {
@@ -73,7 +75,7 @@ func buildCanonicalSignature(req hm.Request, hmacCreds creds.HMACCreds) (string,
 		constants.SP_ContentLength: fmt.Sprint(len([]byte(req.Body))),
 	}
 
-	canonical := regexp.MustCompile(constants.SP_REGEXP_PATTERN).ReplaceAllStringFunc(hmacCreds.Signature, func(placeholder string) string {
+	canonical := signaturePlacesolderRegexp.ReplaceAllStringFunc(hmacCreds.Signature, func(placeholder string) string {
 		if err != nil {
 			return ""
 		}
