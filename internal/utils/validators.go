@@ -16,7 +16,7 @@ func ValidateHttpRequest(req *hm.Request) error {
 	headers := make(map[string]struct{})
 	for _, h := range req.Headers {
 		if h.Name == "" {
-			return fmt.Errorf("Header can't be empty")
+			return fmt.Errorf("Header Name can't be empty")
 		}
 		_, ok := headers[h.Name]
 		if ok {
