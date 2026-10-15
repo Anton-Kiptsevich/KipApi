@@ -123,10 +123,10 @@ func ValidateCreds(id string, c creds.Creds) error {
 
 func ValidateHMACSignatureRequest(signature string, req hm.Request) error {
 	for _, placeholder := range GetAllSignaturePlaceholders(signature) {
-		if ReplaceHeaderNameWithWildcard(placeholder) == constants.HP_Header {
-			return fmt.Errorf("HMAC signature references an empty header name")
+		if ReplaceHeaderNameWithWildcard(placeholder) != constants.HP_Header {
+			continue
 		}
-		
+
 		headerName := GetHeaderNameFromPlaceholder(placeholder)
 		found := false
 		for _, header := range req.Headers {
