@@ -111,7 +111,7 @@ func ValidateCreds(id string, c creds.Creds) error {
 				constants.HP_Body,
 				constants.HP_ContentLength,
 				constants.HP_Header,
-			}, NormalizePlaceholder(placeholder)) {
+			}, ReplaceHeaderNameWithWildcard(placeholder)) {
 				return fmt.Errorf("%s: HMACCreds Signature Token not supported: %s", id, placeholder)
 			}
 		}
@@ -123,13 +123,12 @@ func ValidateCreds(id string, c creds.Creds) error {
 
 func ValidateHMACSignatureRequest(signature string, req hm.Request) error {
 	for _, placeholder := range GetAllSignaturePlaceholders(signature) {
-		if !strings.HasPrefix(placeholder, "{header:") || !strings.HasSuffix(placeholder, "}") {
-			continue
-		}
-
-		headerName := strings.TrimSuffix(strings.TrimPrefix(placeholder, "{header:"), "}")
+		headerName := GetHeaderNameFromPlaceholder(placeholder)
 		if headerName == "" {
-			return fmt.Errorf("HMAC signature references an empty header name")
+			if ReplaceHeaderNameWithWildcard(placeholder) == constants.HP_Header {
+				return fmt.Errorf("HMAC signature references an empty header name")
+			}
+			continue
 		}
 
 		found := false

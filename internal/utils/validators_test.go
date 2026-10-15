@@ -9,19 +9,37 @@ import (
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 )
 
-func TestNormalizePlaceholder(t *testing.T) {
+func TestGetHeaderNameFromPlaceholder(t *testing.T) {
 	tests := []struct {
 		name, input, want string
 	}{
-		{"fixed placeholder", constants.HP_Method, constants.HP_Method, constants.HP_Method},
-		{"header placeholder", "{header:Authorization}", constants.HP_Header, constants.HP_Header},
-		{"future wildcard placeholder", "{future:anything}", "{future:##}", "{future:##}"},
-		{"no colon", "{method}", "{method}", "{method}"},
+		{"header name", "{header:Authorization}", "Authorization"},
+		{"empty header name", "{header:}", ""},
+		{"not a header placeholder", "{method}", ""},
+		{"other wildcard placeholder", "{future:anything}", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := normalizePlaceholder(tt.input); got != tt.want {
-				t.Fatalf("normalizePlaceholder(%q) = %q, want %q", tt.input, got, tt.want)
+			if got := GetHeaderNameFromPlaceholder(tt.input); got != tt.want {
+				t.Fatalf("GetHeaderNameFromPlaceholder(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReplaceHeaderNameWithWildcard(t *testing.T) {
+	tests := []struct {
+		name, input, want string
+	}{
+		{"header placeholder", "{header:Authorization}", constants.HP_Header},
+		{"empty header name", "{header:}", constants.HP_Header},
+		{"fixed placeholder", constants.HP_Method, constants.HP_Method},
+		{"unknown wildcard placeholder", "{future:anything}", "{future:anything}"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ReplaceHeaderNameWithWildcard(tt.input); got != tt.want {
+				t.Fatalf("ReplaceHeaderNameWithWildcard(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}
