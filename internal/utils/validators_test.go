@@ -31,9 +31,9 @@ func TestReplaceHeaderNameWithWildcard(t *testing.T) {
 	tests := []struct {
 		name, input, want string
 	}{
-		{"header placeholder", "{header:Authorization}", constants.HP_Header},
-		{"empty header name", "{header:}", constants.HP_Header},
-		{"fixed placeholder", constants.HP_Method, constants.HP_Method},
+		{"header placeholder", "{header:Authorization}", constants.SP_Header},
+		{"empty header name", "{header:}", constants.SP_Header},
+		{"fixed placeholder", constants.SP_Method, constants.SP_Method},
 		{"unknown wildcard placeholder", "{future:anything}", "{future:anything}"},
 	}
 	for _, tt := range tests {
@@ -106,7 +106,7 @@ func TestValidateCreds(t *testing.T) {
 		{"bearer", creds.Creds{CredsType: constants.CT_Bearer, Creds: creds.BearerCreds{Token: "token"}}},
 		{"api key", creds.Creds{CredsType: constants.CT_ApiKey, Creds: creds.ApiKeyCreds{ApiKey: "key", FieldName: "X-API-Key"}}},
 		{"oauth2", creds.Creds{CredsType: constants.CT_OAuth2, Creds: creds.OAuth2Creds{AccessToken: "access", RefreshToken: "refresh", ExpirationDate: time.Now().Add(time.Hour), TokenURL: "https://example.com/token", ClientID: "client", ClientSecret: "secret"}}},
-		{"hmac with header placeholder", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", CanonicalizedSignature: "{method}:{header:X-Request-Id}"}}},
+		{"hmac with header placeholder", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", Signature: "{method}:{header:X-Request-Id}"}}},
 	}
 	for _, tt := range valid {
 		t.Run(tt.name, func(t *testing.T) {
@@ -123,7 +123,7 @@ func TestValidateCreds(t *testing.T) {
 		{"empty bearer token", creds.Creds{CredsType: constants.CT_Bearer, Creds: creds.BearerCreds{}}},
 		{"empty api key field name", creds.Creds{CredsType: constants.CT_ApiKey, Creds: creds.ApiKeyCreds{ApiKey: "key"}}},
 		{"unknown type", creds.Creds{CredsType: "unknown", Creds: struct{}{}}},
-		{"unknown hmac placeholder", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", CanonicalizedSignature: "{future:anything}"}}},
+		{"unknown hmac placeholder", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", Signature: "{future:anything}"}}},
 	}
 	for _, tt := range invalid {
 		t.Run(tt.name, func(t *testing.T) {

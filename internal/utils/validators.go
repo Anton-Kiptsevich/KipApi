@@ -92,7 +92,7 @@ func ValidateCreds(id string, c creds.Creds) error {
 		if !ok {
 			return fmt.Errorf("%s: CredsType %s requires HMACCreds", id, c.CredsType)
 		}
-		if hmac.SecretKey == "" || hmac.SignatureHeaderName == "" || hmac.CanonicalizedSignature == "" {
+		if hmac.SecretKey == "" || hmac.SignatureHeaderName == "" || hmac.Signature == "" {
 			return fmt.Errorf("%s: HMACCreds must contain SecretKey, SignatureHeaderName and CanonicalizedSignature", id)
 		}
 		if hmac.SignatureEncoding != "base64" && hmac.SignatureEncoding != "hex" {
@@ -102,19 +102,19 @@ func ValidateCreds(id string, c creds.Creds) error {
 			return fmt.Errorf("%s: HMACCreds Algorithm not supported", id)
 		}
 
-		for _, placeholder := range GetAllSignaturePlaceholders(hmac.CanonicalizedSignature) {
+		for _, placeholder := range GetAllSignaturePlaceholders(hmac.Signature) {
 			if !slices.Contains([]string{
-				constants.HP_Method,
-				constants.HP_Url,
-				constants.HP_BaseUrl,
-				constants.HP_Scheme,
-				constants.HP_Host,
-				constants.HP_Port,
-				constants.HP_Path,
-				constants.HP_Query,
-				constants.HP_Body,
-				constants.HP_ContentLength,
-				constants.HP_Header,
+				constants.SP_Method,
+				constants.SP_Url,
+				constants.SP_BaseUrl,
+				constants.SP_Scheme,
+				constants.SP_Host,
+				constants.SP_Port,
+				constants.SP_Path,
+				constants.SP_Query,
+				constants.SP_Body,
+				constants.SP_ContentLength,
+				constants.SP_Header,
 			}, ReplaceHeaderNameWithWildcard(placeholder)) {
 				return fmt.Errorf("%s: HMACCreds Signature Token not supported: %s", id, placeholder)
 			}
@@ -127,7 +127,7 @@ func ValidateCreds(id string, c creds.Creds) error {
 
 func ValidateHMACSignatureRequest(signature string, req hm.Request) error {
 	for _, placeholder := range GetAllSignaturePlaceholders(signature) {
-		if ReplaceHeaderNameWithWildcard(placeholder) != constants.HP_Header {
+		if ReplaceHeaderNameWithWildcard(placeholder) != constants.SP_Header {
 			continue
 		}
 

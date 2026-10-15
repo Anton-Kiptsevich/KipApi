@@ -23,7 +23,7 @@ func MakeApiCall(call hm.ApiCall) (hm.Response, error) {
 		if !ok {
 			panic("Creds model/type discrepancy")
 		}
-		if err := utils.ValidateHMACSignatureRequest(hmacCreds.CanonicalizedSignature, call.Request); err != nil {
+		if err := utils.ValidateHMACSignatureRequest(hmacCreds.Signature, call.Request); err != nil {
 			return hm.Response{}, err
 		}
 	}
