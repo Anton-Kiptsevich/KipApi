@@ -1,7 +1,6 @@
 package services
 
 import (
-	"github.com/Anton-Kiptsevich/KipApi/constants"
 	"github.com/Anton-Kiptsevich/KipApi/internal/utils"
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 	"github.com/Anton-Kiptsevich/KipApi/services/base"

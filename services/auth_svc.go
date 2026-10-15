@@ -113,25 +113,6 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 	if err != nil {
 		return call.Request, err
 	}
-	if call.AuthMethod == constants.AM_HMAC {
-		hmacCreds, ok := currentCreds.Creds.(creds.HMACCreds)
-		if !ok {
-			panic("Auth Method/Creds Type discrepancy")
-		}
-		headerValue, err := auth.GetHMACSignature(call.Request, hmacCreds)
-		if err != nil {
-			return call.Request, err
-		}
-		for i := range call.Request.Headers {
-			if strings.EqualFold(call.Request.Headers[i].Name, hmacCreds.SignatureHeaderName) {
-				call.Request.Headers[i].Value = &headerValue
-				call.Request.Headers[i].Values = nil
-				return call.Request, nil
-			}
-		}
-		call.Request.Headers = append(call.Request.Headers, hm.Header{Name: hmacCreds.SignatureHeaderName, Value: &headerValue})
-		return call.Request, nil
-	}
 
 	if call.AuthMethod == constants.AM_MTLS {
 		if call.Request.TlsCert != nil {
@@ -172,31 +153,39 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 
 		return call.Request, nil
 	}
-
+	
+	var hmacCreds creds.HMACCreds
+	var apiKeyCreds creds.ApiKeyCreds
+	ok := false
 	headerName := "Authorization"
 	if call.AuthMethod == constants.AM_Header {
-		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
+		apiKeyCreds, ok = currentCreds.Creds.(creds.ApiKeyCreds)
 		if !ok {
 			panic("Auth Method/Creds Type discrepancy")
 		}
-		headerName = apiKey.FieldName
+		headerName = apiKeyCreds.FieldName
 	}
-
-	headerValue := ""
-
+	if call.AuthMethod == constants.AM_HMAC {
+		hmacCreds, ok = currentCreds.Creds.(creds.HMACCreds)
+		if !ok {
+			panic("Auth Method/Creds Type discrepancy")
+		}
+		headerName = hmacCreds.SignatureHeaderName
+	}
 	for _, h := range call.Request.Headers {
 		if strings.EqualFold(h.Name, headerName) {
 			return call.Request, nil
 		}
 	}
 
+	headerValue := ""
 	switch call.AuthMethod {
 	case constants.AM_Basic:
 		basic, ok := currentCreds.Creds.(creds.BasicCreds)
 		if !ok {
 			panic("Auth Method/Creds Type discrepancy")
 		}
-		headerValue = "Basic " + base64.StdEncoding.EncodeToString([]byte(basic.Username+":"+basic.Password))
+		headerValue = "Basic " + base64.StdEncoding.EncodeToString([]byte(basic.Username + ":" + basic.Password))
 
 	case constants.AM_Bearer:
 		var token string
@@ -219,17 +208,20 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 		headerValue = "Bearer " + token
 
 	case constants.AM_Header:
-		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
-		if !ok {
-			panic("Auth Method/Creds Type discrepancy")
-		}
-		headerValue = apiKey.ApiKey
+		headerValue = apiKeyCreds.ApiKey
 
 	case constants.AM_Digest:
 		headerValue, err = auth.GetDigestAuthorization(call.Request, currentCreds)
 		if err != nil {
 			return call.Request, err
 		}
+
+	case constants.AM_HMAC:
+		headerValue, err = auth.GetHMACSignature(call.Request, hmacCreds)
+		if err != nil {
+			return call.Request, err
+		}
+
 	}
 
 	headers := make([]hm.Header, 0, len(call.Request.Headers)+1)

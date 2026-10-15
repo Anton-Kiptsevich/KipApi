@@ -19,8 +19,6 @@ import (
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 )
 
-var signaturePlaceholderPattern = regexp.MustCompile(`\{[^{}]+\}`)
-
 func GetHMACSignature(req hm.Request, hmacCreds creds.HMACCreds) (string, error) {
 	canonical, err := buildCanonicalSignature(req, hmacCreds)
 	if err != nil {
@@ -38,7 +36,7 @@ func GetHMACSignature(req hm.Request, hmacCreds creds.HMACCreds) (string, error)
 	case constants.HA_SHA512:
 		hashFunc = sha512.New
 	default:
-		return "", fmt.Errorf("unsupported HMAC algorithm %q", hmacCreds.Algorithm)
+		panic("unsupported HMAC algorithm")
 	}
 
 	signature := hmac.New(hashFunc, []byte(hmacCreds.SecretKey))
@@ -51,7 +49,7 @@ func GetHMACSignature(req hm.Request, hmacCreds creds.HMACCreds) (string, error)
 	case "hex":
 		return hex.EncodeToString(sum), nil
 	default:
-		return "", fmt.Errorf("unsupported HMAC signature encoding %q", hmacCreds.SignatureEncoding)
+		panic("unsupported HMAC signature encoding")
 	}
 }
 
@@ -59,7 +57,7 @@ func buildCanonicalSignature(req hm.Request, hmacCreds creds.HMACCreds) (string,
 	fullURL := req.BaseUrl + req.Path
 	parsedURL, err := url.Parse(fullURL)
 	if err != nil {
-		return "", fmt.Errorf("parse URL for HMAC signature: %w", err)
+		panic("Incorrect request url")
 	}
 
 	values := map[string]string{
@@ -75,7 +73,7 @@ func buildCanonicalSignature(req hm.Request, hmacCreds creds.HMACCreds) (string,
 		constants.SP_ContentLength: fmt.Sprint(len([]byte(req.Body))),
 	}
 
-	canonical := signaturePlaceholderPattern.ReplaceAllStringFunc(hmacCreds.Signature, func(placeholder string) string {
+	canonical := regexp.MustCompile(constants.SP_REGEXP_PATTERN).ReplaceAllStringFunc(hmacCreds.Signature, func(placeholder string) string {
 		if err != nil {
 			return ""
 		}
