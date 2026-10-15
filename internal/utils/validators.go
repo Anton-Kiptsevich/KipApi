@@ -93,7 +93,7 @@ func ValidateCreds(id string, c creds.Creds) error {
 			return fmt.Errorf("%s: CredsType %s requires HMACCreds", id, c.CredsType)
 		}
 		if hmac.SecretKey == "" || hmac.SignatureHeaderName == "" || hmac.Signature == "" {
-			return fmt.Errorf("%s: HMACCreds must contain SecretKey, SignatureHeaderName and CanonicalizedSignature", id)
+			return fmt.Errorf("%s: HMACCreds must contain SecretKey, Signature", id)
 		}
 		if hmac.SignatureEncoding != "base64" && hmac.SignatureEncoding != "hex" {
 			return fmt.Errorf("%s: HMACCreds SignatureEncoding method not supported", id)
@@ -159,6 +159,10 @@ func ValidateAuthMethod(authMethod, credsType string) error {
 	case constants.AM_Header, constants.AM_Query:
 		if credsType != constants.CT_ApiKey {
 			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_ApiKey)
+		}
+	case constants.AM_HMAC:
+		if credsType != constants.CT_HMAC {
+			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_HMAC)
 		}
 	case constants.AM_Digest:
 		if credsType != constants.CT_Digest {

@@ -113,6 +113,26 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 	if err != nil {
 		return call.Request, err
 	}
+	if call.AuthMethod == constants.AM_HMAC {
+		hmacCreds, ok := currentCreds.Creds.(creds.HMACCreds)
+		if !ok {
+			panic("Auth Method/Creds Type discrepancy")
+		}
+		headerValue, err := auth.GetHMACSignature(call.Request, hmacCreds)
+		if err != nil {
+			return call.Request, err
+		}
+		for i := range call.Request.Headers {
+			if strings.EqualFold(call.Request.Headers[i].Name, hmacCreds.SignatureHeaderName) {
+				call.Request.Headers[i].Value = &headerValue
+				call.Request.Headers[i].Values = nil
+				return call.Request, nil
+			}
+		}
+		call.Request.Headers = append(call.Request.Headers, hm.Header{Name: hmacCreds.SignatureHeaderName, Value: &headerValue})
+		return call.Request, nil
+	}
+
 	if call.AuthMethod == constants.AM_MTLS {
 		if call.Request.TlsCert != nil {
 			return call.Request, nil

@@ -1,6 +1,6 @@
 package constants
 
-// HMAC signature placeholders.
+// Signature placeholders.
 const (
 	SP_Method        = "{method}"
 	SP_Url           = "{url}"

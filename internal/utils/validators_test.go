@@ -139,7 +139,7 @@ func TestValidateAuthMethod(t *testing.T) {
 		{constants.AM_Basic, constants.CT_Basic}, {constants.AM_Bearer, constants.CT_Bearer},
 		{constants.AM_Bearer, constants.CT_OAuth2}, {constants.AM_Header, constants.CT_ApiKey},
 		{constants.AM_Query, constants.CT_ApiKey}, {constants.AM_Digest, constants.CT_Digest},
-		{constants.AM_MTLS, constants.CT_MTLS},
+		{constants.AM_MTLS, constants.CT_MTLS}, {constants.AM_HMAC, constants.CT_HMAC},
 	}
 	for _, tt := range valid {
 		t.Run(tt.method+"/"+tt.credsType, func(t *testing.T) {
