@@ -18,11 +18,12 @@ func ValidateHttpRequest(req *hm.Request) error {
 		if h.Name == "" {
 			return fmt.Errorf("Header Name can't be empty")
 		}
-		_, ok := headers[h.Name]
+		headerName := strings.ToLower(h.Name)
+		_, ok := headers[headerName]
 		if ok {
 			return fmt.Errorf("Duplicate header %s", h.Name)
 		}
-		headers[h.Name] = struct{}{}
+		headers[headerName] = struct{}{}
 		if (h.Value == nil) == (h.Values == nil) {
 			return fmt.Errorf("Header can only have either Value or Values")
 		}
