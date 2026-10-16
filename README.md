@@ -82,6 +82,7 @@ A credential describes the secret material you have. An authentication method de
 | API key | `creds.ApiKeyCreds` | `constants.AM_Header` or `constants.AM_Query` |
 | Digest username/password | `creds.DigestCreds` | `constants.AM_Digest` |
 | Client certificate/key | `creds.MTLSCreds` | `constants.AM_MTLS` |
+| HMAC signature | `creds.HMACCreds` | `constants.AM_HMAC` |
 
 Wrap a specific credential model in `creds.Creds`:
 
@@ -131,7 +132,7 @@ If the request already has an `Authorization` header, KipApi leaves it unchanged
 
 ### Headers and body
 
-Each `httpmodel.Header` must set exactly one of `Value` or `Values`. Use `Value` for one value and `Values` for multiple values.
+Each `httpmodel.Header` must set exactly one of `Value` or `Values`. Use `Value` for one value and `Values` for multiple values. Header names must not be empty or duplicated; duplicate detection is case-insensitive.
 
 ```go
 contentType := "application/json"
@@ -147,6 +148,78 @@ request := httpmodel.Request{
 ```
 
 KipApi sends `Body` as supplied; it does not serialize application structs into JSON. Encode your payload before assigning it.
+
+## HMAC authentication
+
+KipApi supports HMAC request signing with SHA-1, SHA-256, SHA-384, and SHA-512. Signatures can be encoded as Base64 or hexadecimal.
+
+Register HMAC credentials using `creds.HMACCreds`:
+
+- `Algorithm`: hash algorithm, such as `constants.HA_SHA256`.
+- `SecretKey`: secret key used to calculate the signature.
+- `SignatureEncoding`: `base64` or `hex`.
+- `SignatureHeaderName`: header that will carry the generated signature.
+- `Signature`: template describing the data to sign.
+- `PlaceholderCanonicalizationFuncs`: optional functions that transform individual placeholder values before signing.
+
+The signature template supports these placeholders:
+
+| Placeholder | Value |
+|---|---|
+| `{method}` | HTTP method |
+| `{url}` | Full request URL |
+| `{baseUrl}` | Base URL |
+| `{scheme}` | URL scheme |
+| `{host}` | URL hostname |
+| `{port}` | URL port |
+| `{path}` | URL path |
+| `{query}` | URL query string |
+| `{body}` | Request body |
+| `{contentLength}` | Request body length in bytes |
+| `{header:Name}` | Value of a request header |
+
+Use the exact canonicalization format required by the target API. For example, if the API requires the body to be represented by its SHA-256 hash, configure a canonicalization function for `{body}`. Header placeholders must refer to headers present in the request; matching is case-insensitive.
+
+Register the credential with `CredsType: constants.CT_HMAC` and make requests using `AuthMethod: constants.AM_HMAC`. KipApi generates the signature and adds it to `SignatureHeaderName`. If the signature header is already supplied in the request, KipApi preserves it unchanged.
+
+Example:
+
+```go
+credential := creds.Creds{
+    Id:        "hmac-credential",
+    CredsType: constants.CT_HMAC,
+    Creds: creds.HMACCreds{
+        Algorithm:           constants.HA_SHA256,
+        SecretKey:           "YOUR_SECRET_KEY",
+        SignatureEncoding:   "hex",
+        SignatureHeaderName: "X-Signature",
+        Signature:           "{method}\n{path}\n{header:X-Timestamp}\n{body}",
+    },
+}
+if errs := services.SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+    for _, err := range errs {
+        log.Println("invalid credentials:", err)
+    }
+    return
+}
+
+call := httpmodel.ApiCall{
+    CredsId:    "hmac-credential",
+    AuthMethod: constants.AM_HMAC,
+    Request: httpmodel.Request{
+        Method:  "POST",
+        BaseUrl: "https://api.example.com",
+        Path:    "/orders",
+        Headers: []httpmodel.Header{
+            {Name: "X-Timestamp", Value: &timestamp},
+        },
+        Body: `{"id":123}`,
+    },
+}
+response, err := services.MakeApiCall(call)
+```
+
+Replace the example secret, URL, timestamp, and canonical template with the values and signing rules required by your API. Load secrets from configuration or a secret store rather than hard-coding them in source control.
 
 ## Plain HTTP requests
 
