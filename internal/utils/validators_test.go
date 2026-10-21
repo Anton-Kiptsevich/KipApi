@@ -99,6 +99,10 @@ func TestValidateHttpRequestCookies(t *testing.T) {
 		{name: "valid cookie", cookies: []hm.Cookie{{Name: "session", Value: "token"}}},
 		{name: "empty name", cookies: []hm.Cookie{{Value: "token"}}, wantErr: true},
 		{name: "empty value", cookies: []hm.Cookie{{Name: "session"}}, wantErr: true},
+		{name: "invalid name", cookies: []hm.Cookie{{Name: "bad name", Value: "token"}}, wantErr: true},
+		{name: "invalid value", cookies: []hm.Cookie{{Name: "session", Value: "bad value"}}, wantErr: true},
+		{name: "invalid domain", cookies: []hm.Cookie{{Name: "session", Value: "token", Domain: "example.com/path"}}, wantErr: true},
+		{name: "expires and max age", cookies: []hm.Cookie{{Name: "session", Value: "token", Expires: time.Now().Add(time.Hour), MaxAge: 3600}}, wantErr: true},
 		{name: "duplicate names ignoring case", cookies: []hm.Cookie{{Name: "session", Value: "one"}, {Name: "Session", Value: "two"}}, wantErr: true},
 	}
 	for _, tt := range tests {
@@ -131,6 +135,7 @@ func TestValidateCreds(t *testing.T) {
 		{"cookie without expiry", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session", Value: "token"}}}}},
 		{"cookie with expires", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session", Value: "token", Expires: time.Now().Add(time.Hour)}}}}},
 		{"cookie with max age", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session", Value: "token", MaxAge: 3600}}}}},
+		{"cookie with optional attributes", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session", Value: "token", Path: "/", Domain: "example.com"}}}}},
 	}
 	for _, tt := range valid {
 		t.Run(tt.name, func(t *testing.T) {
