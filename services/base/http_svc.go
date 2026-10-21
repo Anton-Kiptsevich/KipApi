@@ -23,6 +23,9 @@ func MakeHttpRequest(req *hm.Request) (hm.Response, error) {
 	if err != nil {
 		return returnHttpError(err)
 	}
+	for _, cookie := range req.Cookies {
+		hReq.AddCookie(&http.Cookie{Name: cookie.Name, Value: cookie.Value})
+	}
 	for _, h := range req.Headers {
 		if h.Value != nil {
 			hReq.Header.Add(h.Name, *h.Value)

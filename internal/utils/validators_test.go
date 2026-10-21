@@ -90,6 +90,27 @@ func TestValidateHttpRequestHeaders(t *testing.T) {
 	}
 }
 
+func TestValidateHttpRequestCookies(t *testing.T) {
+	tests := []struct {
+		name string
+		cookies []hm.Cookie
+		wantErr bool
+	}{
+		{name: "valid cookie", cookies: []hm.Cookie{{Name: "session", Value: "token"}}},
+		{name: "empty name", cookies: []hm.Cookie{{Value: "token"}}, wantErr: true},
+		{name: "empty value", cookies: []hm.Cookie{{Name: "session"}}, wantErr: true},
+		{name: "duplicate names ignoring case", cookies: []hm.Cookie{{Name: "session", Value: "one"}, {Name: "Session", Value: "two"}}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateHttpRequest(&hm.Request{Method: "GET", BaseUrl: "https://example.com", Path: "/resource", Cookies: tt.cookies})
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ValidateHttpRequest() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestValidateHttpRequestRejectsMalformedURL(t *testing.T) {
 	err := ValidateHttpRequest(&hm.Request{Method: "GET", BaseUrl: "https://example.com", Path: "/bad%zz"})
 	if err == nil {
@@ -107,9 +128,9 @@ func TestValidateCreds(t *testing.T) {
 		{"api key", creds.Creds{CredsType: constants.CT_ApiKey, Creds: creds.ApiKeyCreds{ApiKey: "key", FieldName: "X-API-Key"}}},
 		{"oauth2", creds.Creds{CredsType: constants.CT_OAuth2, Creds: creds.OAuth2Creds{AccessToken: "access", RefreshToken: "refresh", ExpirationDate: time.Now().Add(time.Hour), TokenURL: "https://example.com/token", ClientID: "client", ClientSecret: "secret"}}},
 		{"hmac with header placeholder", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", Signature: "{method}:{header:X-Request-Id}"}}},
-		{"cookie without expiry", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Name: "session", Value: "token"}}}}},
-		{"cookie with expires", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Name: "session", Value: "token", Expires: time.Now().Add(time.Hour)}}}}},
-		{"cookie with max age", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Name: "session", Value: "token", MaxAge: 3600}}}}},
+		{"cookie without expiry", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session", Value: "token"}}}}},
+		{"cookie with expires", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session", Value: "token", Expires: time.Now().Add(time.Hour)}}}}},
+		{"cookie with max age", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session", Value: "token", MaxAge: 3600}}}}},
 	}
 	for _, tt := range valid {
 		t.Run(tt.name, func(t *testing.T) {
@@ -129,11 +150,12 @@ func TestValidateCreds(t *testing.T) {
 		{"unknown hmac placeholder", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", Signature: "{future:anything}"}}},
 		{"cookie wrong model", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.BearerCreds{Token: "token"}}},
 		{"cookie list empty", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{}}},
-		{"cookie name empty", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Value: "token"}}}}},
-		{"cookie value empty", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Name: "session"}}}}},
-		{"cookie expires and max age", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Name: "session", Value: "token", Expires: time.Now().Add(time.Hour), MaxAge: 3600}}}}},
-		{"duplicate cookie names", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Name: "session", Value: "one"}, {Name: "session", Value: "two"}}}}},
-		{"invalid cookie name", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Name: "bad name", Value: "token"}}}}},
+		{"cookie name empty", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Value: "token"}}}}},
+		{"cookie value empty", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session"}}}}},
+		{"cookie expires and max age", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session", Value: "token", Expires: time.Now().Add(time.Hour), MaxAge: 3600}}}}},
+		{"duplicate cookie names", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session", Value: "one"}, {Name: "session", Value: "two"}}}}},
+		{"duplicate cookie names ignoring case", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session", Value: "one"}, {Name: "Session", Value: "two"}}}}},
+		{"invalid cookie name", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "bad name", Value: "token"}}}}},
 	}
 	for _, tt := range invalid {
 		t.Run(tt.name, func(t *testing.T) {

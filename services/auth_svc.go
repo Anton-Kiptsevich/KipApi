@@ -133,6 +133,26 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 		return call.Request, nil
 	}
 
+	if call.AuthMethod == constants.AM_Cookie {
+		cookieCreds, ok := currentCreds.Creds.(creds.CookieCreds)
+		if !ok {
+			panic("Auth Method/Creds Type discrepancy")
+		}
+		for _, cookie := range cookieCreds.Cookies {
+			exists := false
+			for _, requestCookie := range call.Request.Cookies {
+				if strings.EqualFold(requestCookie.Name, cookie.Name) {
+					exists = true
+					break
+				}
+			}
+			if !exists {
+				call.Request.Cookies = append(call.Request.Cookies, cookie)
+			}
+		}
+		return call.Request, nil
+	}
+
 	if call.AuthMethod == constants.AM_Query {
 		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
 		if !ok {

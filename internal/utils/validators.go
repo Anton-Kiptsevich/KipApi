@@ -29,13 +29,24 @@ func ValidateHttpRequest(req *hm.Request) error {
 			return fmt.Errorf("Header can only have either Value or Values")
 		}
 	}
+	cookieNames := make(map[string]struct{}, len(req.Cookies))
+	for _, cookie := range req.Cookies {
+		if err := validateCookie(cookie); err != nil {
+			return fmt.Errorf("invalid Cookie %q: %w", cookie.Name, err)
+		}
+		name := strings.ToLower(cookie.Name)
+		if _, exists := cookieNames[name]; exists {
+			return fmt.Errorf("Duplicate Cookie %s", cookie.Name)
+		}
+		cookieNames[name] = struct{}{}
+	}
 	if _, err := url.Parse(req.BaseUrl + req.Path); err != nil {
 		return fmt.Errorf("Invalid request URL: %w", err)
 	}
 	return nil
 }
 
-func validateAuthCookie(cookie creds.AuthCookie) error {
+func validateCookie(cookie hm.Cookie) error {
 	if cookie.Name == "" {
 		return fmt.Errorf("Cookie Name must not be empty")
 	}
@@ -121,13 +132,14 @@ func ValidateCreds(id string, c creds.Creds) error {
 		}
 		names := make(map[string]struct{}, len(cookieCreds.Cookies))
 		for _, cookie := range cookieCreds.Cookies {
-			if err := validateAuthCookie(cookie); err != nil {
+			if err := validateCookie(cookie); err != nil {
 				return fmt.Errorf("%s: invalid Cookie %q: %w", id, cookie.Name, err)
 			}
-			if _, exists := names[cookie.Name]; exists {
+			name := strings.ToLower(cookie.Name)
+			if _, exists := names[name]; exists {
 				return fmt.Errorf("%s: duplicate Cookie Name %s", id, cookie.Name)
 			}
-			names[cookie.Name] = struct{}{}
+			names[name] = struct{}{}
 		}
 	case constants.CT_HMAC:
 		hmac, ok := c.Creds.(creds.HMACCreds)
