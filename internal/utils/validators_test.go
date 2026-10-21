@@ -107,6 +107,9 @@ func TestValidateCreds(t *testing.T) {
 		{"api key", creds.Creds{CredsType: constants.CT_ApiKey, Creds: creds.ApiKeyCreds{ApiKey: "key", FieldName: "X-API-Key"}}},
 		{"oauth2", creds.Creds{CredsType: constants.CT_OAuth2, Creds: creds.OAuth2Creds{AccessToken: "access", RefreshToken: "refresh", ExpirationDate: time.Now().Add(time.Hour), TokenURL: "https://example.com/token", ClientID: "client", ClientSecret: "secret"}}},
 		{"hmac with header placeholder", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", Signature: "{method}:{header:X-Request-Id}"}}},
+		{"cookie without expiry", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Name: "session", Value: "token"}}}}},
+		{"cookie with expires", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Name: "session", Value: "token", Expires: time.Now().Add(time.Hour)}}}}},
+		{"cookie with max age", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Name: "session", Value: "token", MaxAge: 3600}}}}},
 	}
 	for _, tt := range valid {
 		t.Run(tt.name, func(t *testing.T) {
@@ -124,6 +127,13 @@ func TestValidateCreds(t *testing.T) {
 		{"empty api key field name", creds.Creds{CredsType: constants.CT_ApiKey, Creds: creds.ApiKeyCreds{ApiKey: "key"}}},
 		{"unknown type", creds.Creds{CredsType: "unknown", Creds: struct{}{}}},
 		{"unknown hmac placeholder", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", Signature: "{future:anything}"}}},
+		{"cookie wrong model", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.BearerCreds{Token: "token"}}},
+		{"cookie list empty", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{}}},
+		{"cookie name empty", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Value: "token"}}}}},
+		{"cookie value empty", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Name: "session"}}}}},
+		{"cookie expires and max age", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Name: "session", Value: "token", Expires: time.Now().Add(time.Hour), MaxAge: 3600}}}}},
+		{"duplicate cookie names", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Name: "session", Value: "one"}, {Name: "session", Value: "two"}}}}},
+		{"invalid cookie name", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []creds.AuthCookie{{Name: "bad name", Value: "token"}}}}},
 	}
 	for _, tt := range invalid {
 		t.Run(tt.name, func(t *testing.T) {
@@ -140,6 +150,7 @@ func TestValidateAuthMethod(t *testing.T) {
 		{constants.AM_Bearer, constants.CT_OAuth2}, {constants.AM_Header, constants.CT_ApiKey},
 		{constants.AM_Query, constants.CT_ApiKey}, {constants.AM_Digest, constants.CT_Digest},
 		{constants.AM_MTLS, constants.CT_MTLS}, {constants.AM_HMAC, constants.CT_HMAC},
+		{constants.AM_Cookie, constants.CT_Cookie},
 	}
 	for _, tt := range valid {
 		t.Run(tt.method+"/"+tt.credsType, func(t *testing.T) {
@@ -151,6 +162,7 @@ func TestValidateAuthMethod(t *testing.T) {
 	invalid := []struct{ method, credsType string }{
 		{constants.AM_Basic, constants.CT_Bearer}, {constants.AM_Bearer, constants.CT_ApiKey},
 		{constants.AM_Header, constants.CT_Bearer}, {constants.AM_Query, constants.CT_OAuth2},
+		{constants.AM_Cookie, constants.CT_Bearer},
 		{"unknown", constants.CT_Basic},
 	}
 	for _, tt := range invalid {

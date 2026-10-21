@@ -3,6 +3,7 @@ package utils
 import (
 	"crypto/tls"
 	"fmt"
+	"net/http"
 	"net/url"
 	"slices"
 	"strings"
@@ -30,6 +31,29 @@ func ValidateHttpRequest(req *hm.Request) error {
 	}
 	if _, err := url.Parse(req.BaseUrl + req.Path); err != nil {
 		return fmt.Errorf("Invalid request URL: %w", err)
+	}
+	return nil
+}
+
+func validateAuthCookie(cookie creds.AuthCookie) error {
+	if cookie.Name == "" {
+		return fmt.Errorf("Cookie Name must not be empty")
+	}
+	if cookie.Value == "" {
+		return fmt.Errorf("Cookie Value must not be empty")
+	}
+	if !cookie.Expires.IsZero() && cookie.MaxAge != 0 {
+		return fmt.Errorf("Cookie cannot contain both Expires and MaxAge")
+	}
+	if err := (&http.Cookie{
+		Name:   cookie.Name,
+		Value:  cookie.Value,
+		Expires: cookie.Expires,
+		MaxAge: cookie.MaxAge,
+		Path:   cookie.Path,
+		Domain: cookie.Domain,
+	}).Valid(); err != nil {
+		return fmt.Errorf("invalid Cookie: %w", err)
 	}
 	return nil
 }
@@ -86,6 +110,24 @@ func ValidateCreds(id string, c creds.Creds) error {
 		}
 		if _, err := tls.X509KeyPair(mtls.ClientCert, mtls.ClientKey); err != nil {
 			return fmt.Errorf("%s: MTLSCreds contains invalid ClientCert/ClientKey pair: %w", id, err)
+		}
+	case constants.CT_Cookie:
+		cookieCreds, ok := c.Creds.(creds.CookieCreds)
+		if !ok {
+			return fmt.Errorf("%s: CredsType %s requires CookieCreds", id, c.CredsType)
+		}
+		if len(cookieCreds.Cookies) == 0 {
+			return fmt.Errorf("%s: CookieCreds must contain at least one Cookie", id)
+		}
+		names := make(map[string]struct{}, len(cookieCreds.Cookies))
+		for _, cookie := range cookieCreds.Cookies {
+			if err := validateAuthCookie(cookie); err != nil {
+				return fmt.Errorf("%s: invalid Cookie %q: %w", id, cookie.Name, err)
+			}
+			if _, exists := names[cookie.Name]; exists {
+				return fmt.Errorf("%s: duplicate Cookie Name %s", id, cookie.Name)
+			}
+			names[cookie.Name] = struct{}{}
 		}
 	case constants.CT_HMAC:
 		hmac, ok := c.Creds.(creds.HMACCreds)
@@ -159,6 +201,10 @@ func ValidateAuthMethod(authMethod, credsType string) error {
 	case constants.AM_Header, constants.AM_Query:
 		if credsType != constants.CT_ApiKey {
 			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_ApiKey)
+		}
+	case constants.AM_Cookie:
+		if credsType != constants.CT_Cookie {
+			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_Cookie)
 		}
 	case constants.AM_HMAC:
 		if credsType != constants.CT_HMAC {
