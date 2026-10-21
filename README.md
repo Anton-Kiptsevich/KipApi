@@ -82,6 +82,7 @@ A credential describes the secret material you have. An authentication method de
 | API key | `creds.ApiKeyCreds` | `constants.AM_Header` or `constants.AM_Query` |
 | Digest username/password | `creds.DigestCreds` | `constants.AM_Digest` |
 | Client certificate/key | `creds.MTLSCreds` | `constants.AM_MTLS` |
+| Cookie authentication | `creds.CookieCreds` | `constants.AM_Cookie` |
 | HMAC signature | `creds.HMACCreds` | `constants.AM_HMAC` |
 
 Wrap a specific credential model in `creds.Creds`:
@@ -125,6 +126,7 @@ response, err := services.MakeApiCall(call)
 - `BaseUrl`: base URL, such as `https://api.example.com`.
 - `Path`: endpoint path, such as `/users`.
 - `Headers`: optional request headers.
+- `Cookies`: optional request cookies.
 - `Body`: optional request body as a string.
 - `TlsCert`: optional TLS client certificate.
 
@@ -148,6 +150,48 @@ request := httpmodel.Request{
 ```
 
 KipApi sends `Body` as supplied; it does not serialize application structs into JSON. Encode your payload before assigning it.
+
+## Cookie authentication
+
+Use Cookie authentication when an API expects session or other authentication cookies. Register the cookies in `creds.CookieCreds` and use `constants.AM_Cookie` for the request.
+
+```go
+credential := creds.Creds{
+    Id:        "cookie-credential",
+    CredsType: constants.CT_Cookie,
+    Creds: creds.CookieCreds{
+        Cookies: []httpmodel.Cookie{
+            {Name: "session", Value: "YOUR_SESSION_COOKIE"},
+            {Name: "csrf", Value: "YOUR_CSRF_COOKIE"},
+        },
+    },
+}
+if errs := services.SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+    for _, err := range errs {
+        log.Println("invalid credentials:", err)
+    }
+    return
+}
+
+call := httpmodel.ApiCall{
+    CredsId:    "cookie-credential",
+    AuthMethod: constants.AM_Cookie,
+    Request: httpmodel.Request{
+        Method:  "GET",
+        BaseUrl: "https://api.example.com",
+        Path:    "/protected",
+    },
+}
+response, err := services.MakeApiCall(call)
+```
+
+Import `httpmodel "github.com/Anton-Kiptsevich/KipApi/models/http"` for `httpmodel.Cookie`, and initialize the credential service with `services.InitCredsSvc()` once during application startup. Handle `err` and inspect the response status and body as appropriate.
+
+The `Cookies` field accepts multiple cookies. Each cookie has a required, non-empty `Name` and `Value`; optional attributes are `Path`, `Domain`, `Expires`, and `MaxAge`. A cookie cannot set both `Expires` and `MaxAge`, and cookie names must be unique case-insensitively within the same list.
+
+You can also set cookies directly on `httpmodel.Request.Cookies`. If a request cookie and a credential cookie have the same name (case-insensitively), the request cookie takes precedence and the credential cookie with that name is not added. This lets a caller override a stored cookie for an individual request.
+
+KipApi sends the configured cookies with the request; it does not automatically refresh or renew them. Your application is responsible for obtaining updated cookies and updating the stored credentials when needed.
 
 ## HMAC authentication
 
@@ -193,7 +237,7 @@ credential := creds.Creds{
         SecretKey:           "YOUR_SECRET_KEY",
         SignatureEncoding:   "hex",
         SignatureHeaderName: "X-Signature",
-        Signature:           "{method}\n{path}\n{header:X-Timestamp}\n{body}",
+        Signature:           "{method}\\n{path}\\n{header:X-Timestamp}\\n{body}",
     },
 }
 if errs := services.SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
@@ -266,8 +310,8 @@ for id, credential := range pending {
         // Handle the error and leave this entry pending.
         continue
     }
-    if err := services.MarkCredsSynced(id); err != nil {
-        // Handle an unknown credential ID.
+    if err := services.MarkCredsSynced(id, credential.Version); err != nil {
+        // Handle an unknown or outdated credential version.
     }
 }
 ```
