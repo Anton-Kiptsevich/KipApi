@@ -1,5 +1,5 @@
 package creds
 
 type CookieCreds struct {
-	Cookies []AuthCookie
+	Cookies	[]AuthCookie
 }

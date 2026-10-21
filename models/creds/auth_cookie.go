@@ -3,10 +3,10 @@ package creds
 import "time"
 
 type AuthCookie struct {
-	Name   string
-	Value  string
-	Expires time.Time
-	MaxAge int
-	Path   string
-	Domain string
+	Name	string
+	Value	string
+	Expires	time.Time
+	MaxAge	int
+	Path	string
+	Domain	string
 }
