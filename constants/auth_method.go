@@ -9,4 +9,5 @@ const (
 	AM_HMAC   = "HMAC"
 	AM_MTLS   = "mTLS"
 	AM_AWS    = "AWS Signature"
+	AM_Cookie = "Cookie"
 )
