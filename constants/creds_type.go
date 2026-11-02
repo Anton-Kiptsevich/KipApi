@@ -8,5 +8,6 @@ const (
 	CT_Digest  = "Digest"
 	CT_MTLS    = "mTLS"
 	CT_HMAC    = "HMAC"
+	CT_AWS     = "AWS Signature"
 	CT_Cookie  = "Cookie"
 )
