@@ -173,6 +173,33 @@ func ValidateCreds(id string, c creds.Creds) error {
 				return fmt.Errorf("%s: HMACCreds Signature Token not supported: %s", id, placeholder)
 			}
 		}
+	case constants.CT_AWS:
+		aws, ok := c.Creds.(creds.AWSV4Creds)
+		if !ok {
+			return fmt.Errorf("%s: CredsType %s requires AWSV4Creds", id, c.CredsType)
+		}
+		if aws.AccessKeyID == "" || aws.SecretAccessKey == "" || aws.Region == "" || aws.Service == "" || len(aws.Signature) == 0 {
+			return fmt.Errorf("%s: AWSV4Creds must contain AccessKeyID, SecretAccessKey, Region, Service and Signature", id)
+		}
+		for _, signature := range aws.Signature {
+			for _, placeholder := range GetAllSignaturePlaceholders(signature) {
+				if !slices.Contains([]string{
+					constants.SP_Method,
+					constants.SP_Url,
+					constants.SP_BaseUrl,
+					constants.SP_Scheme,
+					constants.SP_Host,
+					constants.SP_Port,
+					constants.SP_Path,
+					constants.SP_Query,
+					constants.SP_Body,
+					constants.SP_ContentLength,
+					constants.SP_Header,
+				}, ReplaceHeaderNameWithWildcard(placeholder)) {
+					return fmt.Errorf("%s: AWSV4Creds Signature Token not supported: %s", id, placeholder)
+				}
+			}
+		}
 	default:
 		return fmt.Errorf("%s: Unknown CredsType %s", id, c.CredsType)
 	}
@@ -180,21 +207,30 @@ func ValidateCreds(id string, c creds.Creds) error {
 }
 
 func ValidateHMACSignatureRequest(signature string, req hm.Request) error {
-	for _, placeholder := range GetAllSignaturePlaceholders(signature) {
-		if ReplaceHeaderNameWithWildcard(placeholder) != constants.SP_Header {
-			continue
-		}
+	return validateSignatureRequest([]string{signature}, req, "HMAC")
+}
 
-		headerName := GetHeaderNameFromPlaceholder(placeholder)
-		found := false
-		for _, header := range req.Headers {
-			if strings.EqualFold(header.Name, headerName) {
-				found = true
-				break
+func ValidateAWS4SignatureRequest(signature []string, req hm.Request) error {
+	return validateSignatureRequest(signature, req, "AWS Signature V4")
+}
+
+func validateSignatureRequest(signatures []string, req hm.Request, authType string) error {
+	for _, signature := range signatures {
+		for _, placeholder := range GetAllSignaturePlaceholders(signature) {
+			if ReplaceHeaderNameWithWildcard(placeholder) != constants.SP_Header {
+				continue
 			}
-		}
-		if !found {
-			return fmt.Errorf("HMAC signature references header %s, but it is missing from Request", headerName)
+			headerName := GetHeaderNameFromPlaceholder(placeholder)
+			found := false
+			for _, header := range req.Headers {
+				if strings.EqualFold(header.Name, headerName) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("%s signature references header %s, but it is missing from Request", authType, headerName)
+			}
 		}
 	}
 	return nil
@@ -221,6 +257,10 @@ func ValidateAuthMethod(authMethod, credsType string) error {
 	case constants.AM_HMAC:
 		if credsType != constants.CT_HMAC {
 			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_HMAC)
+		}
+	case constants.AM_AWS:
+		if credsType != constants.CT_AWS {
+			return fmt.Errorf("AuthMethod %s requires %s credentials", authMethod, constants.CT_AWS)
 		}
 	case constants.AM_Digest:
 		if credsType != constants.CT_Digest {
