@@ -84,6 +84,7 @@ A credential describes the secret material you have. An authentication method de
 | Client certificate/key | `creds.MTLSCreds` | `constants.AM_MTLS` |
 | Cookie authentication | `creds.CookieCreds` | `constants.AM_Cookie` |
 | HMAC signature | `creds.HMACCreds` | `constants.AM_HMAC` |
+| AWS Signature V4 | `creds.AWSV4Creds` | `constants.AM_AWS` |
 
 Wrap a specific credential model in `creds.Creds`:
 
@@ -264,6 +265,57 @@ response, err := services.MakeApiCall(call)
 ```
 
 Replace the example secret, URL, timestamp, and canonical template with the values and signing rules required by your API. Load secrets from configuration or a secret store rather than hard-coding them in source control.
+
+## AWS Signature V4
+
+KipApi supports AWS Signature Version 4 using the standard signing process. Register credentials with `creds.AWSV4Creds`:
+
+- `AccessKeyID`: AWS access key ID.
+- `SecretAccessKey`: AWS secret access key.
+- `Region`: AWS region, such as `us-east-1`.
+- `Service`: AWS service identifier, such as `s3` or `execute-api`.
+
+Use `constants.CT_AWS` as the credential type and `constants.AM_AWS` as the authentication method. KipApi builds the canonical request from the HTTP request, derives the signing key, calculates the signature, and adds the `Authorization` header.
+
+The request must include an `X-Amz-Date` header in the format `YYYYMMDDTHHMMSSZ`, or a valid HTTP `Date` header. KipApi calculates the SHA-256 payload hash and adds `X-Amz-Content-Sha256`. Any existing value of that header must match the request body hash.
+
+Example:
+
+```go
+credential := creds.Creds{
+    Id:        "aws-credential",
+    CredsType: constants.CT_AWS,
+    Creds: creds.AWSV4Creds{
+        AccessKeyID:     "YOUR_ACCESS_KEY_ID",
+        SecretAccessKey: "YOUR_SECRET_ACCESS_KEY",
+        Region:          "us-east-1",
+        Service:         "execute-api",
+    },
+}
+if errs := services.SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+    for _, err := range errs {
+        log.Println("invalid credentials:", err)
+    }
+    return
+}
+
+amzDate := time.Now().UTC().Format("20060102T150405Z")
+call := httpmodel.ApiCall{
+    CredsId:    "aws-credential",
+    AuthMethod: constants.AM_AWS,
+    Request: httpmodel.Request{
+        Method:  "GET",
+        BaseUrl: "https://YOUR_API_ID.execute-api.us-east-1.amazonaws.com",
+        Path:    "/users",
+        Headers: []httpmodel.Header{
+            {Name: "X-Amz-Date", Value: &amzDate},
+        },
+    },
+}
+response, err := services.MakeApiCall(call)
+```
+
+The example requires importing Go's `time` package. Use the region and service identifier for the target AWS endpoint. Load access keys from configuration or a secret store rather than hard-coding them in source control.
 
 ## Plain HTTP requests
 

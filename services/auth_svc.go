@@ -175,6 +175,7 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 	}
 	
 	var hmacCreds creds.HMACCreds
+	var awsCreds creds.AWSV4Creds
 	var apiKeyCreds creds.ApiKeyCreds
 	ok := false
 	headerName := "Authorization"
@@ -191,6 +192,12 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 			panic("Auth Method/Creds Type discrepancy")
 		}
 		headerName = hmacCreds.SignatureHeaderName
+	}
+	if call.AuthMethod == constants.AM_AWS {
+		awsCreds, ok = currentCreds.Creds.(creds.AWSV4Creds)
+		if !ok {
+			panic("Auth Method/Creds Type discrepancy")
+		}
 	}
 	for _, h := range call.Request.Headers {
 		if strings.EqualFold(h.Name, headerName) {
@@ -238,6 +245,12 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 
 	case constants.AM_HMAC:
 		headerValue, err = auth.GetHMACSignature(call.Request, hmacCreds)
+		if err != nil {
+			return call.Request, err
+		}
+
+	case constants.AM_AWS:
+		headerValue, err = auth.GetAWSV4Authorization(&call.Request, awsCreds)
 		if err != nil {
 			return call.Request, err
 		}

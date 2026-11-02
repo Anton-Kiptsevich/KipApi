@@ -141,6 +141,14 @@ func ValidateCreds(id string, c creds.Creds) error {
 			}
 			names[name] = struct{}{}
 		}
+	case constants.CT_AWS:
+		aws, ok := c.Creds.(creds.AWSV4Creds)
+		if !ok {
+			return fmt.Errorf("%s: CredsType %s requires AWSV4Creds", id, c.CredsType)
+		}
+		if aws.AccessKeyID == "" || aws.SecretAccessKey == "" || aws.Region == "" || aws.Service == "" {
+			return fmt.Errorf("%s: AWSV4Creds must contain AccessKeyID, SecretAccessKey, Region and Service", id)
+		}
 	case constants.CT_HMAC:
 		hmac, ok := c.Creds.(creds.HMACCreds)
 		if !ok {
