@@ -6,7 +6,4 @@ type AWSV4Creds struct {
 
 	Region  string
 	Service string
-
-	Signature []string // Each element is a template processed sequentially by the HMAC chain.
-	PlaceholderCanonicalizationFuncs map[string]func(value string) (string, error)
 }

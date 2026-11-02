@@ -173,33 +173,7 @@ func ValidateCreds(id string, c creds.Creds) error {
 				return fmt.Errorf("%s: HMACCreds Signature Token not supported: %s", id, placeholder)
 			}
 		}
-	case constants.CT_AWS:
-		aws, ok := c.Creds.(creds.AWSV4Creds)
-		if !ok {
-			return fmt.Errorf("%s: CredsType %s requires AWSV4Creds", id, c.CredsType)
-		}
-		if aws.AccessKeyID == "" || aws.SecretAccessKey == "" || aws.Region == "" || aws.Service == "" || len(aws.Signature) == 0 {
-			return fmt.Errorf("%s: AWSV4Creds must contain AccessKeyID, SecretAccessKey, Region, Service and Signature", id)
-		}
-		for _, signature := range aws.Signature {
-			for _, placeholder := range GetAllSignaturePlaceholders(signature) {
-				if !slices.Contains([]string{
-					constants.SP_Method,
-					constants.SP_Url,
-					constants.SP_BaseUrl,
-					constants.SP_Scheme,
-					constants.SP_Host,
-					constants.SP_Port,
-					constants.SP_Path,
-					constants.SP_Query,
-					constants.SP_Body,
-					constants.SP_ContentLength,
-					constants.SP_Header,
-				}, ReplaceHeaderNameWithWildcard(placeholder)) {
-					return fmt.Errorf("%s: AWSV4Creds Signature Token not supported: %s", id, placeholder)
-				}
-			}
-		}
+
 	default:
 		return fmt.Errorf("%s: Unknown CredsType %s", id, c.CredsType)
 	}
@@ -208,10 +182,6 @@ func ValidateCreds(id string, c creds.Creds) error {
 
 func ValidateHMACSignatureRequest(signature string, req hm.Request) error {
 	return validateSignatureRequest([]string{signature}, req, "HMAC")
-}
-
-func ValidateAWS4SignatureRequest(signature []string, req hm.Request) error {
-	return validateSignatureRequest(signature, req, "AWS Signature V4")
 }
 
 func validateSignatureRequest(signatures []string, req hm.Request, authType string) error {

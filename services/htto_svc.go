@@ -23,10 +23,6 @@ func MakeApiCall(call hm.ApiCall) (hm.Response, error) {
 		if err := utils.ValidateHMACSignatureRequest(credential.Creds.(creds.HMACCreds).Signature, call.Request); err != nil {
 			return hm.Response{}, err
 		}
-	case constants.CT_AWS:
-		if err := utils.ValidateAWS4SignatureRequest(credential.Creds.(creds.AWSV4Creds).Signature, call.Request); err != nil {
-			return hm.Response{}, err
-		}
 	}
 
 	req, err := InitAuthorizationIfNeeded(call)
