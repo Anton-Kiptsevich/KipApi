@@ -48,6 +48,15 @@ func TestGetAWSV4AuthorizationWithExistingDate(t *testing.T) {
 	if headerNames[awsDateHeader] {
 		t.Errorf("%s must not be returned when it already exists in the request", awsDateHeader)
 	}
+	if awsV4TestHeaderCount(headers, "Authorization") != 1 {
+		t.Error("GetAWSV4Authorization() must return exactly one Authorization header")
+	}
+	if awsV4TestHeaderCount(headers, awsPayloadHashHeader) != 1 {
+		t.Errorf("GetAWSV4Authorization() must return exactly one %s header", awsPayloadHashHeader)
+	}
+	if count := awsV4TestHeaderCount(headers, awsDateHeader); count != 0 {
+		t.Errorf("GetAWSV4Authorization() returned %d %s headers, want 0", count, awsDateHeader)
+	}
 }
 
 func TestGetAWSV4AuthorizationWithoutDate(t *testing.T) {
