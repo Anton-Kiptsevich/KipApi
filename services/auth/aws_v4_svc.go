@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Anton-Kiptsevich/KipApi/constants"
 	"github.com/Anton-Kiptsevich/KipApi/internal/utils"
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
@@ -89,7 +90,7 @@ func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) (string, [
 	signingKey := utils.CalculateHMACChain(
 		[]byte("AWS4"+awsCreds.SecretAccessKey),
 		[]string{date, awsCreds.Region, awsCreds.Service, aws4Terminator},
-		"SHA256",
+		constants.HA_SHA256,
 	)
 	signature := hex.EncodeToString(utils.CalculateHMACChain(signingKey, []string{stringToSign}, "SHA256"))
 
