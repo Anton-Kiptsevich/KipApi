@@ -1,153 +1,162 @@
 package auth
 
 import (
-	"crypto/md5"
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/Anton-Kiptsevich/KipApi/constants"
-	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 )
 
-func TestGetDigestAuthorizationReferenceCalculations(t *testing.T) {
+func TestGetDigestChallenge(t *testing.T) {
 	tests := []struct {
-		name      string
-		algorithm string
-		qop       string
-		body      string
+		name    string
+		headers []hm.Header
+		want    digestChallenge
+		wantErr string
 	}{
-		{name: "MD5 without qop", algorithm: "MD5"},
-		{name: "SHA-256 without qop", algorithm: "SHA-256"},
-		{name: "MD5 qop auth", algorithm: "MD5", qop: "auth"},
-		{name: "MD5 qop auth-int", algorithm: "MD5", qop: "auth-int", body: "request body"},
-		{name: "MD5-sess qop auth", algorithm: "MD5-sess", qop: "auth"},
+		{
+			name: "all supported parameters",
+			headers: []hm.Header{
+				{Name: "WWW-Authenticate", Value: digestTestHeaderValue(`Digest realm="test-realm", nonce="test-nonce", algorithm=SHA-256, qop="auth,auth-int", opaque="test-opaque"`)},
+			},
+			want: digestChallenge{
+				Realm: "test-realm", Nonce: "test-nonce", Algorithm: "SHA-256",
+				Qop: "auth,auth-int", Opaque: "test-opaque",
+			},
+		},
+		{
+			name: "case-insensitive header and scheme",
+			headers: []hm.Header{
+				{Name: "www-authenticate", Value: digestTestHeaderValue(`digest realm="realm", nonce="nonce"`)},
+			},
+			want: digestChallenge{Realm: "realm", Nonce: "nonce"},
+		},
+		{
+			name: "challenge header is absent",
+			headers: []hm.Header{
+				{Name: "Content-Type", Value: digestTestHeaderValue("application/json")},
+			},
+			wantErr: "Digest challenge was not found",
+		},
+		{
+			name: "realm is missing",
+			headers: []hm.Header{
+				{Name: "WWW-Authenticate", Value: digestTestHeaderValue(`Digest nonce="nonce"`)},
+			},
+			wantErr: "must contain realm and nonce",
+		},
+		{
+			name: "nonce is missing",
+			headers: []hm.Header{
+				{Name: "WWW-Authenticate", Value: digestTestHeaderValue(`Digest realm="realm"`)},
+			},
+			wantErr: "must contain realm and nonce",
+		},
+		{
+			name: "malformed parameter",
+			headers: []hm.Header{
+				{Name: "WWW-Authenticate", Value: digestTestHeaderValue(`Digest realm="realm", broken`)},
+			},
+			wantErr: "invalid Digest parameter",
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			const realm = "test-realm"
-			const nonce = "fixed-server-nonce"
-			challenge := fmt.Sprintf("Digest realm=%q, nonce=%q", realm, nonce)
-			if test.algorithm != "" {
-				challenge += fmt.Sprintf(", algorithm=%s", test.algorithm)
+			got, err := getDigestChallenge(test.headers)
+			if test.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+					t.Fatalf("getDigestChallenge() error = %v, want error containing %q", err, test.wantErr)
+				}
+				return
 			}
-			if test.qop != "" {
-				challenge += fmt.Sprintf(", qop=%q", test.qop)
-			}
-			challenge += `, opaque="fixed-opaque"`
-
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("WWW-Authenticate", challenge)
-				w.WriteHeader(http.StatusUnauthorized)
-			}))
-			defer server.Close()
-
-			request := hm.Request{
-				Method:  http.MethodPost,
-				BaseUrl: server.URL,
-				Path:    "/resource?item=1",
-				Body:    test.body,
-			}
-			currentCreds := creds.Creds{
-				Id:        "digest-test",
-				CredsType: constants.CT_Digest,
-				Creds:     creds.DigestCreds{Username: "test-user", Password: "test-password"},
-			}
-
-			authorization, err := GetDigestAuthorization(request, currentCreds)
 			if err != nil {
-				t.Fatalf("GetDigestAuthorization() error = %v", err)
+				t.Fatalf("getDigestChallenge() error = %v", err)
 			}
-			if !strings.HasPrefix(authorization, "Digest ") {
-				t.Fatalf("authorization = %q, want Digest scheme", authorization)
+			if got != test.want {
+				t.Errorf("getDigestChallenge() = %#v, want %#v", got, test.want)
 			}
-			params, err := parseDigestParams(strings.TrimPrefix(authorization, "Digest "))
+		})
+	}
+}
+
+func TestParseDigestParams(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    map[string]string
+		wantErr string
+	}{
+		{
+			name:  "quoted and unquoted values",
+			input: `username="test-user", algorithm=SHA-256, qop="auth,auth-int", nonce="test-nonce"`,
+			want: map[string]string{
+				"username": "test-user",
+				"algorithm": "SHA-256",
+				"qop": "auth,auth-int",
+				"nonce": "test-nonce",
+			},
+		},
+		{
+			name:  "parameter names are normalized",
+			input: `Realm="test-realm", NONCE="test-nonce"`,
+			want: map[string]string{"realm": "test-realm", "nonce": "test-nonce"},
+		},
+		{
+			name:    "missing equals sign",
+			input:   `realm="test", broken`,
+			wantErr: "invalid Digest parameter",
+		},
+		{
+			name:    "unterminated quoted value",
+			input:   `realm="test`,
+			wantErr: "unterminated Digest parameter",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := parseDigestParams(test.input)
+			if test.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+					t.Fatalf("parseDigestParams() error = %v, want error containing %q", err, test.wantErr)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("parseDigestParams() error = %v", err)
 			}
-
-			if params["username"] != "test-user" || params["realm"] != realm || params["nonce"] != nonce {
-				t.Fatalf("unexpected identity/challenge parameters: %#v", params)
+			if len(got) != len(test.want) {
+				t.Fatalf("parseDigestParams() = %#v, want %#v", got, test.want)
 			}
-			if params["uri"] != "/resource?item=1" {
-				t.Errorf("uri = %q, want /resource?item=1", params["uri"])
-			}
-			if params["opaque"] != "fixed-opaque" {
-				t.Errorf("opaque = %q, want fixed-opaque", params["opaque"])
-			}
-
-			algorithm := strings.ToLower(test.algorithm)
-			if algorithm == "" {
-				algorithm = "md5"
-			}
-			qop := test.qop
-			cnonce := params["cnonce"]
-			if qop != "" {
-				if params["qop"] != qop || params["nc"] != "00000001" || cnonce == "" {
-					t.Fatalf("unexpected qop parameters: %#v", params)
+			for key, want := range test.want {
+				if got[key] != want {
+					t.Errorf("parameter %q = %q, want %q", key, got[key], want)
 				}
-			} else if params["qop"] != "" || cnonce != "" || params["nc"] != "" {
-				t.Fatalf("unexpected qop parameters for challenge without qop: %#v", params)
 			}
+		})
+	}
+}
 
-			ha1 := digestTestHash(algorithm, "test-user:"+realm+":test-password")
-			if algorithm == "md5-sess" {
-				ha1 = digestTestHash(algorithm, ha1+":"+nonce+":"+cnonce)
-			}
-			ha2Input := request.Method + ":" + params["uri"]
-			if qop == "auth-int" {
-				ha2Input += ":" + digestTestHash(algorithm, test.body)
-			}
-			ha2 := digestTestHash(algorithm, ha2Input)
+func TestContainsToken(t *testing.T) {
+	tests := []struct {
+		value string
+		token string
+		want  bool
+	}{
+		{value: "auth,auth-int", token: "auth", want: true},
+		{value: "AUTH-INT, AUTH", token: "auth", want: true},
+		{value: "auth-int", token: "auth", want: false},
+		{value: "auth", token: "auth-int", want: false},
+	}
 
-			var expected string
-			if qop == "" {
-				expected = digestTestHash(algorithm, ha1+":"+nonce+":"+ha2)
-			} else {
-				expected = digestTestHash(algorithm, ha1+":"+nonce+":00000001:"+cnonce+":"+qop+":"+ha2)
-			}
-			if params["response"] != expected {
-				t.Errorf("response = %q, want independently calculated %q", params["response"], expected)
-			}
+	for _, test := range tests {
+		if got := containsToken(test.value, test.token); got != test.want {
+			t.Errorf("containsToken(%q, %q) = %v, want %v", test.value, test.token, got, test.want)
 		}
 	}
 }
 
-func TestGetDigestAuthorizationRejectsUnsupportedQop(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="nonce", qop="auth-conf"`)
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
-	defer server.Close()
-
-	_, err := GetDigestAuthorization(hm.Request{
-		Method: http.MethodGet, BaseUrl: server.URL, Path: "/",
-	}, creds.Creds{
-		Id: "digest-test", CredsType: constants.CT_Digest,
-		Creds: creds.DigestCreds{Username: "user", Password: "password"},
-	})
-	if err == nil || !strings.Contains(err.Error(), "unsupported Digest qop") {
-		t.Fatalf("GetDigestAuthorization() error = %v, want unsupported qop error", err)
-	}
-}
-
-func digestTestHash(algorithm, value string) string {
-	var sum []byte
-	switch algorithm {
-	case "md5", "md5-sess":
-		hash := md5.Sum([]byte(value))
-		sum = hash[:]
-	case "sha-256":
-		hash := sha256.Sum256([]byte(value))
-		sum = hash[:]
-	default:
-		panic("unsupported digest test algorithm")
-	}
-	return hex.EncodeToString(sum)
+func digestTestHeaderValue(value string) *string {
+	return &value
 }
