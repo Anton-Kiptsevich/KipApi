@@ -1,6 +1,7 @@
 package services
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
@@ -85,6 +86,190 @@ func TestApiKeyHeaderPreservesExistingConfiguredHeader(t *testing.T) {
 	}
 	if request.Headers[0].Value == nil || *request.Headers[0].Value != existingValue {
 		t.Fatalf("existing header value changed")
+	}
+}
+
+func TestInitAuthorizationIfNeededBasicAuth(t *testing.T) {
+	InitCredsSvc()
+	credential := creds.Creds{
+		Id:        "basic-auth-unit",
+		CredsType: constants.CT_Basic,
+		Creds:     creds.BasicCreds{Username: "user", Password: "pass"},
+	}
+	if errs := SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+		t.Fatalf("SetCreds() errors = %v", errs)
+	}
+
+	request, err := InitAuthorizationIfNeeded(hm.ApiCall{
+		CredsId: credential.Id, AuthMethod: constants.AM_Basic,
+		Request: hm.Request{Method: "GET", BaseUrl: "https://api.example.com"},
+	})
+	if err != nil {
+		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
+	}
+	if len(request.Headers) != 1 || request.Headers[0].Name != "Authorization" {
+		t.Fatalf("headers = %#v, want one Authorization header", request.Headers)
+	}
+	if request.Headers[0].Value == nil || *request.Headers[0].Value != "Basic dXNlcjpwYXNz" {
+		t.Errorf("Authorization = %v, want Basic dXNlcjpwYXNz", request.Headers[0].Value)
+	}
+}
+
+func TestInitAuthorizationIfNeededBearerAuthPreservesCallerHeader(t *testing.T) {
+	InitCredsSvc()
+	credential := creds.Creds{
+		Id:        "bearer-auth-unit",
+		CredsType: constants.CT_Bearer,
+		Creds:     creds.BearerCreds{Token: "stored-token"},
+	}
+	if errs := SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+		t.Fatalf("SetCreds() errors = %v", errs)
+	}
+
+	callerAuthorization := "caller-authorization"
+	request, err := InitAuthorizationIfNeeded(hm.ApiCall{
+		CredsId: credential.Id, AuthMethod: constants.AM_Bearer,
+		Request: hm.Request{
+			Method: "GET", BaseUrl: "https://api.example.com",
+			Headers: []hm.Header{{Name: "authorization", Value: &callerAuthorization}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
+	}
+	if len(request.Headers) != 1 {
+		t.Fatalf("got %d headers, want 1", len(request.Headers))
+	}
+	if request.Headers[0].Value != &callerAuthorization || *request.Headers[0].Value != callerAuthorization {
+		t.Error("caller-provided Authorization header was overwritten")
+	}
+}
+
+func TestInitAuthorizationIfNeededQueryAuth(t *testing.T) {
+	InitCredsSvc()
+	credential := creds.Creds{
+		Id:        "query-auth-unit",
+		CredsType: constants.CT_ApiKey,
+		Creds:     creds.ApiKeyCreds{ApiKey: "secret value", FieldName: "api_key"},
+	}
+	if errs := SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+		t.Fatalf("SetCreds() errors = %v", errs)
+	}
+
+	request, err := InitAuthorizationIfNeeded(hm.ApiCall{
+		CredsId: credential.Id, AuthMethod: constants.AM_Query,
+		Request: hm.Request{
+			Method: "GET", BaseUrl: "https://api.example.com",
+			Path: "/resource?existing=1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
+	}
+	if request.BaseUrl != "https://api.example.com" {
+		t.Errorf("BaseUrl = %q, want https://api.example.com", request.BaseUrl)
+	}
+	if request.Path != "/resource?api_key=secret+value&existing=1" {
+		t.Errorf("Path = %q, want /resource?api_key=secret+value&existing=1", request.Path)
+	}
+	if len(request.Headers) != 0 {
+		t.Errorf("query auth unexpectedly added headers: %#v", request.Headers)
+	}
+}
+
+func TestInitAuthorizationIfNeededQueryAuthPreservesExistingKey(t *testing.T) {
+	InitCredsSvc()
+	credential := creds.Creds{
+		Id:        "query-auth-existing-unit",
+		CredsType: constants.CT_ApiKey,
+		Creds:     creds.ApiKeyCreds{ApiKey: "stored-secret", FieldName: "api_key"},
+	}
+	if errs := SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+		t.Fatalf("SetCreds() errors = %v", errs)
+	}
+
+	request, err := InitAuthorizationIfNeeded(hm.ApiCall{
+		CredsId: credential.Id, AuthMethod: constants.AM_Query,
+		Request: hm.Request{
+			Method: "GET", BaseUrl: "https://api.example.com",
+			Path: "/resource?api_key=caller-value&existing=1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
+	}
+	if request.Path != "/resource?api_key=caller-value&existing=1" {
+		t.Errorf("Path = %q, want existing api_key value to be preserved", request.Path)
+	}
+}
+
+func TestInitAuthorizationIfNeededCookieAuthPreservesExistingCookie(t *testing.T) {
+	InitCredsSvc()
+	credential := creds.Creds{
+		Id:        "cookie-auth-unit",
+		CredsType: constants.CT_Cookie,
+		Creds: creds.CookieCreds{Cookies: []hm.Cookie{
+			{Name: "session", Value: "stored-session"},
+			{Name: "refresh", Value: "stored-refresh"},
+		}},
+	}
+	if errs := SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+		t.Fatalf("SetCreds() errors = %v", errs)
+	}
+
+	callerCookie := hm.Cookie{Name: "SESSION", Value: "caller-session"}
+	request, err := InitAuthorizationIfNeeded(hm.ApiCall{
+		CredsId: credential.Id, AuthMethod: constants.AM_Cookie,
+		Request: hm.Request{
+			Method: "GET", BaseUrl: "https://api.example.com",
+			Cookies: []hm.Cookie{callerCookie},
+		},
+	})
+	if err != nil {
+		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
+	}
+	if len(request.Cookies) != 2 {
+		t.Fatalf("got %d cookies, want 2", len(request.Cookies))
+	}
+	if request.Cookies[0] != callerCookie {
+		t.Errorf("existing cookie = %#v, want %#v", request.Cookies[0], callerCookie)
+	}
+	if request.Cookies[1] != (hm.Cookie{Name: "refresh", Value: "stored-refresh"}) {
+		t.Errorf("added cookie = %#v, want stored refresh cookie", request.Cookies[1])
+	}
+}
+
+func TestInitAuthorizationIfNeededHMACAuth(t *testing.T) {
+	InitCredsSvc()
+	credential := creds.Creds{
+		Id:        "hmac-auth-unit",
+		CredsType: constants.CT_HMAC,
+		Creds: creds.HMACCreds{
+			Algorithm: constants.HA_SHA256, SecretKey: "secret",
+			SignatureEncoding: "hex", SignatureHeaderName: "X-Signature",
+			Signature: "{method}|{path}",
+		},
+	}
+	if errs := SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+		t.Fatalf("SetCreds() errors = %v", errs)
+	}
+
+	request, err := InitAuthorizationIfNeeded(hm.ApiCall{
+		CredsId: credential.Id, AuthMethod: constants.AM_HMAC,
+		Request: hm.Request{Method: "GET", BaseUrl: "https://api.example.com", Path: "/resource"},
+	})
+	if err != nil {
+		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
+	}
+
+	mac := hmac.New(sha256.New, []byte("secret"))
+	_, _ = mac.Write([]byte("GET|/resource"))
+	wantSignature := hex.EncodeToString(mac.Sum(nil))
+	if len(request.Headers) != 1 || request.Headers[0].Name != "X-Signature" {
+		t.Fatalf("headers = %#v, want one X-Signature header", request.Headers)
+	}
+	if request.Headers[0].Value == nil || *request.Headers[0].Value != wantSignature {
+		t.Errorf("X-Signature = %v, want %q", request.Headers[0].Value, wantSignature)
 	}
 }
 
