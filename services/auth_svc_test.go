@@ -157,6 +157,7 @@ func TestAWSV4AuthorizationOverwritesExistingHeadersWhenDateExists(t *testing.T)
 	existingAuthorization := "caller-authorization"
 	existingPayloadHash := payloadHashValue
 	existingDateHeader := dateHeader
+	existingDateValue := existingDate
 
 	request, err := InitAuthorizationIfNeeded(hm.ApiCall{
 		CredsId:    credential.Id,
@@ -168,7 +169,7 @@ func TestAWSV4AuthorizationOverwritesExistingHeadersWhenDateExists(t *testing.T)
 			Headers: []hm.Header{
 				{Name: "Authorization", Value: &existingAuthorization},
 				{Name: "X-Amz-Content-Sha256", Value: &existingPayloadHash},
-				{Name: "X-Amz-Date", Value: awsV4TestStringPointer(existingDate)},
+				{Name: "X-Amz-Date", Value: &existingDateValue},
 				{Name: "Date", Value: &existingDateHeader},
 			},
 		},
@@ -193,10 +194,7 @@ func TestAWSV4AuthorizationOverwritesExistingHeadersWhenDateExists(t *testing.T)
 	if request.Headers[1].Value == &existingPayloadHash {
 		t.Error("existing X-Amz-Content-Sha256 header was not replaced")
 	}
-	if request.Headers[2].Value != nil && *request.Headers[2].Value != existingDate {
-		t.Errorf("X-Amz-Date = %v, want existing value %q", request.Headers[2].Value, existingDate)
-	}
-	if request.Headers[2].Value == nil || *request.Headers[2].Value != existingDate {
+	if request.Headers[2].Value != &existingDateValue || *request.Headers[2].Value != existingDate {
 		t.Error("existing X-Amz-Date header was modified")
 	}
 	if request.Headers[3].Value != &existingDateHeader || *request.Headers[3].Value != dateHeader {
