@@ -238,11 +238,10 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 		if !ok {
 			panic("Auth Method/Creds Type discrepancy")
 		}
-		value, awsHeaders, err := auth.GetAWSV4Authorization(call.Request, awsCreds)
+		awsHeaders, err := auth.GetAWSV4Authorization(call.Request, awsCreds)
 		if err != nil {
 			return call.Request, err
 		}
-		authHeaders = append(authHeaders, hm.Header{ Name: "Authorization", Value: &value })
 		authHeaders = append(authHeaders, awsHeaders...)
 		owerrideExisted = len(awsHeaders) == 2
 	}
