@@ -121,6 +121,14 @@ func TestAWSV4AuthorizationHeaders(t *testing.T) {
 		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
 	}
 
+	if len(request.Headers) != 3 {
+		t.Fatalf("got %d headers, want 3", len(request.Headers))
+	}
+	for _, name := range []string{"Authorization", "X-Amz-Content-Sha256", "X-Amz-Date"} {
+		if count := awsV4HeaderCount(request.Headers, name); count != 1 {
+			t.Errorf("%s header count = %d, want 1", name, count)
+		}
+	}
 	headerValues := awsV4HeaderValues(request.Headers)
 	const wantAuthorization = "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20110909/us-east-1/host/aws4_request, SignedHeaders=date;host;x-amz-content-sha256;x-amz-date, Signature=8669346105352fcd40f85d6d892aed321806bbc8c65a5aa324eb6cbc4f974838"
 	if got := headerValues["authorization"]; got != wantAuthorization {
@@ -211,6 +219,7 @@ func TestAWSV4AuthorizationPreservesExistingHeadersWithoutDate(t *testing.T) {
 	}
 
 	const body = "payload"
+	before := time.Now().UTC()
 	payloadHash := sha256.Sum256([]byte(body))
 	payloadHashValue := hex.EncodeToString(payloadHash[:])
 	existingAuthorization := "caller-authorization"
@@ -233,11 +242,15 @@ func TestAWSV4AuthorizationPreservesExistingHeadersWithoutDate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
 	}
+	after := time.Now().UTC()
 
 	if len(request.Headers) != 3 {
 		t.Fatalf("got %d headers, want 3", len(request.Headers))
 	}
 
+	if request.Headers[0].Name != "Authorization" || request.Headers[1].Name != "X-Amz-Content-Sha256" {
+		t.Fatalf("existing headers changed order or names: %#v", request.Headers[:2])
+	}
 	if request.Headers[0].Value != &existingAuthorization || *request.Headers[0].Value != existingAuthorization {
 		t.Error("existing Authorization header was overwritten")
 	}
@@ -250,8 +263,11 @@ func TestAWSV4AuthorizationPreservesExistingHeadersWithoutDate(t *testing.T) {
 	if request.Headers[2].Value == nil {
 		t.Fatal("generated X-Amz-Date header has nil value")
 	}
-	if _, err := time.Parse(utils.GetTimeFormatPattern(), *request.Headers[2].Value); err != nil {
+	generatedDate, err := time.Parse(utils.GetTimeFormatPattern(), *request.Headers[2].Value)
+	if err != nil {
 		t.Errorf("generated X-Amz-Date has invalid format: %v", err)
+	} else if generatedDate.Before(before) || generatedDate.After(after) {
+		t.Errorf("generated X-Amz-Date = %v, want a time between %v and %v", generatedDate, before, after)
 	}
 }
 
@@ -266,6 +282,16 @@ func awsV4TestCreds(id string) creds.Creds {
 			Service:         "execute-api",
 		},
 	}
+}
+
+func awsV4HeaderCount(headers []hm.Header, name string) int {
+	count := 0
+	for _, header := range headers {
+		if strings.EqualFold(header.Name, name) {
+			count++
+		}
+	}
+	return count
 }
 
 func awsV4HeaderValues(headers []hm.Header) map[string]string {
