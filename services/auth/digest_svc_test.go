@@ -109,7 +109,7 @@ func TestParseDigestParams(t *testing.T) {
 		},
 		{
 			name:    "unterminated quoted value",
-			input:   `realm="test`,
+			input:   "realm=\"test",
 			wantErr: "unterminated Digest parameter",
 		},
 	}
