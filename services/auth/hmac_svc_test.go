@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"encoding/base64"
+	"encoding/hex"
+	"errors"
 	"strings"
 	"testing"
 
@@ -65,5 +68,129 @@ func TestGetHMACSignatureMissingHeaderUsesEmptyValue(t *testing.T) {
 	}
 	if got == "" {
 		t.Fatal("GetHMACSignature() returned an empty signature")
+	}
+}
+
+
+func TestGetHMACSignatureSupportsBase64Encoding(t *testing.T) {
+	request := hm.Request{
+		Method:  "POST",
+		BaseUrl: "https://example.com",
+		Path:    "/resource",
+		Body:    "payload",
+	}
+	credentials := creds.HMACCreds{
+		Algorithm:         constants.HA_SHA256,
+		SecretKey:         "secret",
+		SignatureEncoding: "hex",
+		Signature:         "{method}|{url}|{body}",
+	}
+
+	hexSignature, err := GetHMACSignature(request, credentials)
+	if err != nil {
+		t.Fatalf("GetHMACSignature() with hex encoding error = %v", err)
+	}
+	signatureBytes, err := hex.DecodeString(hexSignature)
+	if err != nil {
+		t.Fatalf("hex.DecodeString() error = %v", err)
+	}
+
+	credentials.SignatureEncoding = "base64"
+	base64Signature, err := GetHMACSignature(request, credentials)
+	if err != nil {
+		t.Fatalf("GetHMACSignature() with base64 encoding error = %v", err)
+	}
+	if want := base64.StdEncoding.EncodeToString(signatureBytes); base64Signature != want {
+		t.Fatalf("GetHMACSignature() with base64 encoding = %q, want %q", base64Signature, want)
+	}
+}
+
+func TestGetHMACSignatureReturnsCanonicalizationError(t *testing.T) {
+	wantErr := errors.New("canonicalization failed")
+	credentials := creds.HMACCreds{
+		Algorithm:         constants.HA_SHA256,
+		SecretKey:         "secret",
+		SignatureEncoding: "hex",
+		Signature:         "{method}|{body}",
+		PlaceholderCanonicalizationFuncs: map[string]func(string) (string, error){
+			"{body}": func(string) (string, error) {
+				return "", wantErr
+			},
+		},
+	}
+
+	got, err := GetHMACSignature(hm.Request{
+		Method:  "POST",
+		BaseUrl: "https://example.com",
+		Path:    "/",
+		Body:    "payload",
+	}, credentials)
+	if err == nil {
+		t.Fatal("GetHMACSignature() error = nil, want canonicalization error")
+	}
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("GetHMACSignature() error = %v, want wrapped error %v", err, wantErr)
+	}
+	if got != "" {
+		t.Fatalf("GetHMACSignature() = %q, want empty signature on error", got)
+	}
+}
+
+func TestGetHMACSignatureUsesEmptyValueForExistingEmptyHeader(t *testing.T) {
+	emptyValue := ""
+	request := hm.Request{
+		Method:  "GET",
+		BaseUrl: "https://example.com",
+		Path:    "/",
+		Headers: []hm.Header{{Name: "X-Empty", Value: &emptyValue}},
+	}
+	credentials := creds.HMACCreds{
+		Algorithm:         constants.HA_SHA256,
+		SecretKey:         "secret",
+		SignatureEncoding: "hex",
+		Signature:         "{method}|{header:X-Empty}",
+	}
+
+	withEmptyHeader, err := GetHMACSignature(request, credentials)
+	if err != nil {
+		t.Fatalf("GetHMACSignature() error = %v", err)
+	}
+	withoutHeader, err := GetHMACSignature(hm.Request{
+		Method:  "GET",
+		BaseUrl: "https://example.com",
+		Path:    "/",
+	}, credentials)
+	if err != nil {
+		t.Fatalf("GetHMACSignature() without header error = %v", err)
+	}
+	if withEmptyHeader != withoutHeader {
+		t.Fatalf("signature with empty header = %q, without header = %q; want equal signatures", withEmptyHeader, withoutHeader)
+	}
+}
+
+func TestGetHMACSignatureSupportsRepeatedPlaceholders(t *testing.T) {
+	request := hm.Request{
+		Method:  "GET",
+		BaseUrl: "https://example.com",
+		Path:    "/resource",
+	}
+	credentials := creds.HMACCreds{
+		Algorithm:         constants.HA_SHA256,
+		SecretKey:         "secret",
+		SignatureEncoding: "hex",
+		Signature:         "{method}|{method}|{path}|{path}",
+	}
+
+	got, err := GetHMACSignature(request, credentials)
+	if err != nil {
+		t.Fatalf("GetHMACSignature() error = %v", err)
+	}
+	credentials.Signature = "GET|GET|/resource|/resource"
+	want, err := GetHMACSignature(request, credentials)
+	if err != nil {
+		t.Fatalf("GetHMACSignature() for literal signature error = %v", err)
+	}
+	if got != want {
+		t.Fatalf("GetHMACSignature() = %q, want %q", got, want)
 	}
 }
