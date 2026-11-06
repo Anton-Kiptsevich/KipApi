@@ -360,7 +360,7 @@ func TestAWSCanonicalURI(t *testing.T) {
 		{input: "", want: "/"},
 		{input: "/", want: "/"},
 		{input: "/simple/path", want: "/simple/path"},
-		{input: "/a%2fb", want: "/a%2Fb"},
+		{input: "/a%2fb", want: "/a%252fb"},
 		{input: "/a b", want: "/a%20b"},
 		{input: "/café", want: "/caf%C3%A9"},
 		{input: "/a+b", want: "/a%2Bb"},
@@ -477,6 +477,40 @@ func TestAWSURIEncode(t *testing.T) {
 				t.Errorf("awsURIEncode() = %q, want %q", got, test.want)
 			}
 		})
+	}
+}
+
+func TestGetAWSV4AuthorizationMatchesAWSReferenceVector(t *testing.T) {
+	// AWS Signature Version 4 test-suite get-vanilla vector.
+	// The expected signature is fixed independently of the implementation under test.
+	const date = "Mon, 09 Sep 2011 23:36:00 GMT"
+	request := hm.Request{
+		Method:  "GET",
+		BaseUrl: "https://host.foo.com",
+		Path:    "/",
+		Headers: []hm.Header{newAWSHeader("Date", date)},
+	}
+	credentials := creds.AWSV4Creds{
+		AccessKeyID:     "AKIDEXAMPLE",
+		SecretAccessKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+		Region:          "us-east-1",
+		Service:         "host",
+	}
+
+	headers, err := GetAWSV4Authorization(request, credentials)
+	if err != nil {
+		t.Fatalf("GetAWSV4Authorization() error = %v", err)
+	}
+
+	const wantAuthorization = "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20110909/us-east-1/host/aws4_request, SignedHeaders=date;host;x-amz-content-sha256;x-amz-date, Signature=8669346105352fcd40f85d6d892aed321806bbc8c65a5aa324eb6cbc4f974838"
+	if got := awsV4TestHeaderValue(headers, "Authorization"); got != wantAuthorization {
+		t.Errorf("Authorization = %q, want %q", got, wantAuthorization)
+	}
+	if got := awsV4TestHeaderValue(headers, awsPayloadHashHeader); got != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" {
+		t.Errorf("%s = %q, want SHA-256 of empty payload", awsPayloadHashHeader, got)
+	}
+	if got := awsV4TestHeaderValue(headers, awsDateHeader); got != "20110909T233600Z" {
+		t.Errorf("%s = %q, want 20110909T233600Z", awsDateHeader, got)
 	}
 }
 

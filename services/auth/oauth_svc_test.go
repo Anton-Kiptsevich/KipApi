@@ -37,6 +37,7 @@ func TestRefreshOAuthTokenPreservesRefreshTokenWhenNotRotated(t *testing.T) {
 		Id: "oauth-1", CredsType: constants.CT_OAuth2,
 		Creds: creds.OAuth2Creds{AccessToken: "old-access", RefreshToken: "old-refresh", ExpirationDate: time.Now().Add(-time.Minute), TokenURL: server.URL, ClientID: "client-id", ClientSecret: "client-secret"},
 	}
+	beforeRefresh := time.Now()
 	updated, err := RefreshOAuthToken(current)
 	if err != nil {
 		t.Fatalf("RefreshOAuthToken() error = %v", err)
@@ -48,8 +49,8 @@ func TestRefreshOAuthTokenPreservesRefreshTokenWhenNotRotated(t *testing.T) {
 	if got.RefreshToken != "old-refresh" {
 		t.Fatalf("RefreshToken = %q, want old-refresh when omitted by server", got.RefreshToken)
 	}
-	if time.Until(got.ExpirationDate) < 50*time.Minute {
-		t.Fatalf("ExpirationDate is not approximately one hour in the future: %v", got.ExpirationDate)
+	if remaining := got.ExpirationDate.Sub(beforeRefresh); remaining < 3590*time.Second || remaining > 3610*time.Second {
+		t.Fatalf("ExpirationDate delta = %v, want approximately 1 hour (3590s..3610s)", remaining)
 	}
 	if updated.Id != current.Id || updated.CredsType != current.CredsType {
 		t.Fatalf("credential identity/type changed: %#v", updated)

@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -11,6 +13,40 @@ import (
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 )
+
+func TestGetHMACSignatureMatchesRFC4231SHA256Vector(t *testing.T) {
+	key := strings.Repeat(string([]byte{0x0b}), 20)
+	credentials := creds.HMACCreds{
+		Algorithm:         constants.HA_SHA256,
+		SecretKey:         key,
+		SignatureEncoding: "hex",
+		Signature:         "Hi There",
+	}
+	got, err := GetHMACSignature(hm.Request{}, credentials)
+	if err != nil {
+		t.Fatalf("GetHMACSignature() error = %v", err)
+	}
+	const wantHex = "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+	if got != wantHex {
+		t.Fatalf("GetHMACSignature() = %q, want RFC 4231 value %q", got, wantHex)
+	}
+
+	credentials.SignatureEncoding = "base64"
+	got, err = GetHMACSignature(hm.Request{}, credentials)
+	if err != nil {
+		t.Fatalf("GetHMACSignature() with base64 encoding error = %v", err)
+	}
+	const wantBase64 = "sDRMYf1bOFNMyK+g+gvxK4gdwgDJgz2nJuk3wuMyz/c="
+	if got != wantBase64 {
+		t.Fatalf("GetHMACSignature() base64 = %q, want RFC 4231 value %q", got, wantBase64)
+	}
+}
+
+func expectedHMACSHA256Hex(key, message string) string {
+	mac := hmac.New(sha256.New, []byte(key))
+	_, _ = mac.Write([]byte(message))
+	return hex.EncodeToString(mac.Sum(nil))
+}
 
 func TestGetHMACSignatureAppliesPlaceholderCanonicalization(t *testing.T) {
 	requestID := "request id"
@@ -66,8 +102,9 @@ func TestGetHMACSignatureMissingHeaderUsesEmptyValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetHMACSignature() error = %v", err)
 	}
-	if got == "" {
-		t.Fatal("GetHMACSignature() returned an empty signature")
+	want := expectedHMACSHA256Hex("secret", "GET|")
+	if got != want {
+		t.Fatalf("GetHMACSignature() = %q, want %q for canonical input GET|", got, want)
 	}
 }
 
@@ -185,11 +222,7 @@ func TestGetHMACSignatureSupportsRepeatedPlaceholders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetHMACSignature() error = %v", err)
 	}
-	credentials.Signature = "GET|GET|/resource|/resource"
-	want, err := GetHMACSignature(request, credentials)
-	if err != nil {
-		t.Fatalf("GetHMACSignature() for literal signature error = %v", err)
-	}
+	want := expectedHMACSHA256Hex("secret", "GET|GET|/resource|/resource")
 	if got != want {
 		t.Fatalf("GetHMACSignature() = %q, want %q", got, want)
 	}

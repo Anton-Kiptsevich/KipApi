@@ -155,6 +155,16 @@ func TestValidateCreds(t *testing.T) {
 		name string
 		c creds.Creds
 	}{
+		{"basic missing username", creds.Creds{CredsType: constants.CT_Basic, Creds: creds.BasicCreds{Password: "pass"}}},
+		{"basic missing password", creds.Creds{CredsType: constants.CT_Basic, Creds: creds.BasicCreds{Username: "user"}}},
+		{"digest missing username", creds.Creds{CredsType: constants.CT_Digest, Creds: creds.DigestCreds{Password: "pass"}}},
+		{"digest missing password", creds.Creds{CredsType: constants.CT_Digest, Creds: creds.DigestCreds{Username: "user"}}},
+		{"oauth missing refresh token", creds.Creds{CredsType: constants.CT_OAuth2, Creds: creds.OAuth2Creds{AccessToken: "access", ExpirationDate: time.Now().Add(time.Hour), TokenURL: "https://example.com/token", ClientID: "client", ClientSecret: "secret"}}},
+		{"oauth missing token url", creds.Creds{CredsType: constants.CT_OAuth2, Creds: creds.OAuth2Creds{AccessToken: "access", RefreshToken: "refresh", ExpirationDate: time.Now().Add(time.Hour), ClientID: "client", ClientSecret: "secret"}}},
+		{"hmac missing algorithm", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", Signature: "{method}"}}},
+		{"hmac unsupported algorithm", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: "sha3", SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", Signature: "{method}"}}},
+		{"hmac unsupported encoding", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SecretKey: "secret", SignatureEncoding: "raw", SignatureHeaderName: "X-Signature", Signature: "{method}"}}},
+
 		{"wrong model", creds.Creds{CredsType: constants.CT_Basic, Creds: creds.BearerCreds{Token: "token"}}},
 		{"empty bearer token", creds.Creds{CredsType: constants.CT_Bearer, Creds: creds.BearerCreds{}}},
 		{"empty api key field name", creds.Creds{CredsType: constants.CT_ApiKey, Creds: creds.ApiKeyCreds{ApiKey: "key"}}},

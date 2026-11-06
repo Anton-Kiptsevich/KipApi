@@ -95,64 +95,42 @@ func TestAWSV4AuthorizationHeaders(t *testing.T) {
 		Id:        "aws-v4-unit",
 		CredsType: constants.CT_AWS,
 		Creds: creds.AWSV4Creds{
-			AccessKeyID:     "test-access-key",
-			SecretAccessKey: "test-secret-key",
+			AccessKeyID:     "AKIDEXAMPLE",
+			SecretAccessKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
 			Region:          "us-east-1",
-			Service:         "execute-api",
+			Service:         "host",
 		},
 	}
 	if errs := SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
 		t.Fatalf("SetCreds() errors = %v", errs)
 	}
 
-	const body = `{"message":"hello"}`
-	const requestDate = "20261106T090000Z"
-	contentType := "application/json"
-	date := requestDate
-
+	const date = "Mon, 09 Sep 2011 23:36:00 GMT"
+	dateValue := date
 	request, err := InitAuthorizationIfNeeded(hm.ApiCall{
 		CredsId:    credential.Id,
 		AuthMethod: constants.AM_AWS,
 		Request: hm.Request{
-			Method:  "POST",
-			BaseUrl: "https://api.example.com",
-			Path:    "/resource?z=last&a=first",
-			Body:    body,
-			Headers: []hm.Header{
-				{Name: "Content-Type", Value: &contentType},
-				{Name: "X-Amz-Date", Value: &date},
-			},
+			Method:  "GET",
+			BaseUrl: "https://host.foo.com",
+			Path:    "/",
+			Headers: []hm.Header{{Name: "Date", Value: &dateValue}},
 		},
 	})
 	if err != nil {
 		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
 	}
 
-	headerValues := make(map[string]string, len(request.Headers))
-	for _, header := range request.Headers {
-		if header.Value != nil {
-			headerValues[strings.ToLower(header.Name)] = *header.Value
-		}
+	headerValues := awsV4HeaderValues(request.Headers)
+	const wantAuthorization = "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20110909/us-east-1/host/aws4_request, SignedHeaders=date;host;x-amz-content-sha256;x-amz-date, Signature=8669346105352fcd40f85d6d892aed321806bbc8c65a5aa324eb6cbc4f974838"
+	if got := headerValues["authorization"]; got != wantAuthorization {
+		t.Errorf("Authorization = %q, want %q", got, wantAuthorization)
 	}
-
-	payloadHash := sha256.Sum256([]byte(body))
-	expectedPayloadHash := hex.EncodeToString(payloadHash[:])
-	if got := headerValues["x-amz-content-sha256"]; got != expectedPayloadHash {
-		t.Errorf("X-Amz-Content-Sha256 = %q, want %q", got, expectedPayloadHash)
+	if got := headerValues["x-amz-content-sha256"]; got != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" {
+		t.Errorf("X-Amz-Content-Sha256 = %q, want SHA-256 of empty payload", got)
 	}
-
-	const authorizationPrefix = "AWS4-HMAC-SHA256 Credential=test-access-key/20261106/us-east-1/execute-api/aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature="
-	authorization := headerValues["authorization"]
-	if !strings.HasPrefix(authorization, authorizationPrefix) {
-		t.Fatalf("Authorization = %q, want prefix %q", authorization, authorizationPrefix)
-	}
-
-	signature := strings.TrimPrefix(authorization, authorizationPrefix)
-	if len(signature) != 64 {
-		t.Errorf("AWS4 signature length = %d, want 64", len(signature))
-	}
-	if _, err := hex.DecodeString(signature); err != nil {
-		t.Errorf("AWS4 signature is not hexadecimal: %v", err)
+	if got := headerValues["x-amz-date"]; got != "20110909T233600Z" {
+		t.Errorf("X-Amz-Date = %q, want 20110909T233600Z", got)
 	}
 }
 

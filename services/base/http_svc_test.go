@@ -83,3 +83,31 @@ func TestMakeHttpRequestRejectsMalformedURL(t *testing.T) {
 		t.Fatal("MakeHttpRequest() error = nil, want malformed URL error")
 	}
 }
+
+func TestMakeHttpRequestSendsCookies(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie("session")
+		if err != nil {
+			t.Errorf("request Cookie(session) error = %v", err)
+			return
+		}
+		if cookie.Value != "session-token" {
+			t.Errorf("Cookie(session) = %q, want session-token", cookie.Value)
+		}
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer server.Close()
+
+	response, err := MakeHttpRequest(&hm.Request{
+		Method:  http.MethodGet,
+		BaseUrl: server.URL,
+		Path:    "/private",
+		Cookies: []hm.Cookie{{Name: "session", Value: "session-token"}},
+	})
+	if err != nil {
+		t.Fatalf("MakeHttpRequest() error = %v", err)
+	}
+	if response.Status != "200 OK" || response.Body != "ok" {
+		t.Fatalf("response = (%q, %q), want (200 OK, ok)", response.Status, response.Body)
+	}
+}
