@@ -1,6 +1,9 @@
 package services
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
 	"testing"
 
 	"github.com/Anton-Kiptsevich/KipApi/constants"
@@ -80,5 +83,73 @@ func TestApiKeyHeaderPreservesExistingConfiguredHeader(t *testing.T) {
 	}
 	if request.Headers[0].Value == nil || *request.Headers[0].Value != existingValue {
 		t.Fatalf("existing header value changed")
+	}
+}
+
+func TestAWSV4AuthorizationHeaders(t *testing.T) {
+	InitCredsSvc()
+
+	credential := creds.Creds{
+		Id:        "aws-v4-unit",
+		CredsType: constants.CT_AWS,
+		Creds: creds.AWSV4Creds{
+			AccessKeyID:     "test-access-key",
+			SecretAccessKey: "test-secret-key",
+			Region:          "us-east-1",
+			Service:         "execute-api",
+		},
+	}
+	if errs := SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+		t.Fatalf("SetCreds() errors = %v", errs)
+	}
+
+	const body = `{"message":"hello"}`
+	const requestDate = "20261106T090000Z"
+	contentType := "application/json"
+	date := requestDate
+
+	request, err := InitAuthorizationIfNeeded(hm.ApiCall{
+		CredsId:    credential.Id,
+		AuthMethod: constants.AM_AWS,
+		Request: hm.Request{
+			Method:  "POST",
+			BaseUrl: "https://api.example.com",
+			Path:    "/resource?z=last&a=first",
+			Body:    body,
+			Headers: []hm.Header{
+				{Name: "Content-Type", Value: &contentType},
+				{Name: "X-Amz-Date", Value: &date},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
+	}
+
+	headerValues := make(map[string]string, len(request.Headers))
+	for _, header := range request.Headers {
+		if header.Value != nil {
+			headerValues[strings.ToLower(header.Name)] = *header.Value
+		}
+	}
+
+	payloadHash := sha256.Sum256([]byte(body))
+	expectedPayloadHash := hex.EncodeToString(payloadHash[:])
+	if got := headerValues["x-amz-content-sha256"]; got != expectedPayloadHash {
+		t.Errorf("X-Amz-Content-Sha256 = %q, want %q", got, expectedPayloadHash)
+	}
+
+	const authorizationPrefix = "AWS4-HMAC-SHA256 Credential=test-access-key/20261106/us-east-1/execute-api/aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature="
+	authorization := headerValues["authorization"]
+	if !strings.HasPrefix(authorization, authorizationPrefix) {
+		t.Fatalf("Authorization = %q, want prefix %q", authorization, authorizationPrefix)
+	}
+
+	signature := strings.TrimPrefix(authorization, authorizationPrefix)
+	if len(signature) != 64 {
+		t.Errorf("AWS4 signature length = %d, want 64", len(signature))
+	}
+	if _, err := hex.DecodeString(signature); err != nil {
+		t.Errorf("AWS4 signature is not hexadecimal: %v", err)
 	}
 }
