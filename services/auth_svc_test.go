@@ -460,7 +460,7 @@ func TestAWSV4AuthorizationPreservesExistingHeadersWithoutDate(t *testing.T) {
 	}
 
 	const body = "payload"
-	before := time.Now().UTC()
+	before := time.Now().UTC().Truncate(time.Second)
 	payloadHash := sha256.Sum256([]byte(body))
 	payloadHashValue := hex.EncodeToString(payloadHash[:])
 	existingAuthorization := "caller-authorization"
@@ -483,7 +483,7 @@ func TestAWSV4AuthorizationPreservesExistingHeadersWithoutDate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
 	}
-	after := time.Now().UTC()
+	after := time.Now().UTC().Truncate(time.Second)
 
 	if len(request.Headers) != 3 {
 		t.Fatalf("got %d headers, want 3", len(request.Headers))
