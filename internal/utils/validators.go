@@ -53,6 +53,9 @@ func validateCookie(cookie hm.Cookie) error {
 	if cookie.Value == "" {
 		return fmt.Errorf("Cookie Value must not be empty")
 	}
+	if !isValidCookieValue(cookie.Value) {
+		return fmt.Errorf("invalid Cookie Value")
+	}
 	if !cookie.Expires.IsZero() && cookie.MaxAge != 0 {
 		return fmt.Errorf("Cookie cannot contain both Expires and MaxAge")
 	}
@@ -67,6 +70,18 @@ func validateCookie(cookie hm.Cookie) error {
 		return fmt.Errorf("invalid Cookie: %w", err)
 	}
 	return nil
+}
+
+func isValidCookieValue(value string) bool {
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if c == '!' || (c >= '#' && c <= '+') || (c >= '-' && c <= ':') ||
+			(c >= '<' && c <= '[') || (c >= ']' && c <= '~') {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func ValidateCreds(id string, c creds.Creds) error {
