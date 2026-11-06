@@ -551,6 +551,51 @@ func TestGetAWSV4AuthorizationMatchesAWSReferenceVector(t *testing.T) {
 	}
 }
 
+
+func TestGetAWSV4AuthorizationCanonicalizesQueryAndHeaders(t *testing.T) {
+	const requestDate = "20261106T090000Z"
+
+	makeRequest := func(path, headerValue string) hm.Request {
+		return hm.Request{
+			Method:  "GET",
+			BaseUrl: "https://api.example.com",
+			Path:    path,
+			Headers: []hm.Header{
+				newAWSHeader(awsDateHeader, requestDate),
+				newAWSHeader("X-Test", headerValue),
+			},
+		}
+	}
+	getAuthorization := func(request hm.Request) string {
+		t.Helper()
+		headers, _, err := GetAWSV4Authorization(request, testAWSV4Creds())
+		if err != nil {
+			t.Fatalf("GetAWSV4Authorization() error = %v", err)
+		}
+		authorization := awsV4TestHeaderValue(headers, "Authorization")
+		if authorization == "" {
+			t.Fatal("GetAWSV4Authorization() returned an empty Authorization header")
+		}
+		return authorization
+	}
+
+	first := getAuthorization(makeRequest("/resource?z=last&a=first", "  value\twith  spaces "))
+	reordered := getAuthorization(makeRequest("/resource?a=first&z=last", "value with spaces"))
+	if first != reordered {
+		t.Errorf("equivalent query/header values produced different signatures:\n%s\n%s", first, reordered)
+	}
+
+	differentQuery := getAuthorization(makeRequest("/resource?a=changed&z=last", "value with spaces"))
+	if first == differentQuery {
+		t.Error("signature did not change when a query value changed")
+	}
+
+	differentHeader := getAuthorization(makeRequest("/resource?a=first&z=last", "different value"))
+	if first == differentHeader {
+		t.Error("signature did not change when a signed header value changed")
+	}
+}
+
 func testAWSV4Creds() creds.AWSV4Creds {
 	return creds.AWSV4Creds{
 		AccessKeyID:     "test-access-key",
