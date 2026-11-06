@@ -175,7 +175,7 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 	}
 	
 	authHeaders := make([]hm.Header, 0, 3)
-	owerrideExisted := false
+	owerrideExisting := false
 
 	switch call.AuthMethod {
 	case constants.AM_Basic:
@@ -243,7 +243,7 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 			return call.Request, err
 		}
 		authHeaders = append(authHeaders, awsHeaders...)
-		owerrideExisted = overrideExistingHeaders
+		owerrideExisting = overrideExistingHeaders
 	}
 
 	for _, authHeader := range authHeaders {
@@ -255,7 +255,7 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 			}
 		}
 		if existingIndex >= 0 {
-			if owerrideExisted {
+			if owerrideExisting {
 				call.Request.Headers[existingIndex] = authHeader
 			}
 			continue
