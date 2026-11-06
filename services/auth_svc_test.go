@@ -137,30 +137,39 @@ func TestAWSV4AuthorizationHeaders(t *testing.T) {
 func TestAWSV4AuthorizationOverwritesExistingHeadersWhenDateExists(t *testing.T) {
 	InitCredsSvc()
 
-	credential := awsV4TestCreds("aws-v4-overwrite-existing-date")
+	credential := creds.Creds{
+		Id:        "aws-v4-overwrite-existing-date",
+		CredsType: constants.CT_AWS,
+		Creds: creds.AWSV4Creds{
+			AccessKeyID:     "AKIDEXAMPLE",
+			SecretAccessKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+			Region:          "us-east-1",
+			Service:         "host",
+		},
+	}
 	if errs := SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
 		t.Fatalf("SetCreds() errors = %v", errs)
 	}
 
-	const body = "payload"
-	payloadHash := sha256.Sum256([]byte(body))
-	payloadHashValue := hex.EncodeToString(payloadHash[:])
+	const existingDate = "20110909T233600Z"
+	const dateHeader = "Mon, 09 Sep 2011 23:36:00 GMT"
+	const payloadHashValue = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 	existingAuthorization := "caller-authorization"
 	existingPayloadHash := payloadHashValue
-	existingDate := "20261106T090000Z"
+	existingDateHeader := dateHeader
 
 	request, err := InitAuthorizationIfNeeded(hm.ApiCall{
 		CredsId:    credential.Id,
 		AuthMethod: constants.AM_AWS,
 		Request: hm.Request{
-			Method:  "POST",
-			BaseUrl: "https://api.example.com",
-			Path:    "/resource",
-			Body:    body,
+			Method:  "GET",
+			BaseUrl: "https://host.foo.com",
+			Path:    "/",
 			Headers: []hm.Header{
 				{Name: "Authorization", Value: &existingAuthorization},
 				{Name: "X-Amz-Content-Sha256", Value: &existingPayloadHash},
-				{Name: "X-Amz-Date", Value: &existingDate},
+				{Name: "X-Amz-Date", Value: awsV4TestStringPointer(existingDate)},
+				{Name: "Date", Value: &existingDateHeader},
 			},
 		},
 	})
@@ -168,30 +177,30 @@ func TestAWSV4AuthorizationOverwritesExistingHeadersWhenDateExists(t *testing.T)
 		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
 	}
 
-	if len(request.Headers) != 3 {
-		t.Fatalf("got %d headers, want 3", len(request.Headers))
+	if len(request.Headers) != 4 {
+		t.Fatalf("got %d headers, want 4", len(request.Headers))
 	}
-
+	const wantAuthorization = "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20110909/us-east-1/host/aws4_request, SignedHeaders=date;host;x-amz-content-sha256;x-amz-date, Signature=8669346105352fcd40f85d6d892aed321806bbc8c65a5aa324eb6cbc4f974838"
+	if request.Headers[0].Value == nil || *request.Headers[0].Value != wantAuthorization {
+		t.Errorf("Authorization = %v, want %q", request.Headers[0].Value, wantAuthorization)
+	}
 	if request.Headers[0].Value == &existingAuthorization {
 		t.Error("existing Authorization header was not replaced")
-	}
-	if request.Headers[0].Value == nil {
-		t.Fatal("generated Authorization header has nil value")
-	}
-	if *request.Headers[0].Value == existingAuthorization {
-		t.Error("Authorization header does not contain the generated signature")
-	}
-	if !strings.HasPrefix(*request.Headers[0].Value, "AWS4-HMAC-SHA256 Credential=test-access-key/20261106/us-east-1/execute-api/aws4_request, SignedHeaders=") {
-		t.Errorf("Authorization = %q, want generated AWS4 authorization", *request.Headers[0].Value)
-	}
-	if request.Headers[1].Value == &existingPayloadHash {
-		t.Error("existing X-Amz-Content-Sha256 header was not replaced")
 	}
 	if request.Headers[1].Value == nil || *request.Headers[1].Value != payloadHashValue {
 		t.Errorf("X-Amz-Content-Sha256 = %v, want %q", request.Headers[1].Value, payloadHashValue)
 	}
-	if request.Headers[2].Value != &existingDate || *request.Headers[2].Value != existingDate {
-		t.Errorf("existing X-Amz-Date header was modified")
+	if request.Headers[1].Value == &existingPayloadHash {
+		t.Error("existing X-Amz-Content-Sha256 header was not replaced")
+	}
+	if request.Headers[2].Value != nil && *request.Headers[2].Value != existingDate {
+		t.Errorf("X-Amz-Date = %v, want existing value %q", request.Headers[2].Value, existingDate)
+	}
+	if request.Headers[2].Value == nil || *request.Headers[2].Value != existingDate {
+		t.Error("existing X-Amz-Date header was modified")
+	}
+	if request.Headers[3].Value != &existingDateHeader || *request.Headers[3].Value != dateHeader {
+		t.Error("existing Date header was modified")
 	}
 }
 
