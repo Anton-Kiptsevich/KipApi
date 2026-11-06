@@ -171,6 +171,36 @@ func TestInitAuthorizationIfNeededBearerAuthPreservesCallerHeader(t *testing.T) 
 	}
 }
 
+func TestInitAuthorizationIfNeededOAuth2BearerAuth(t *testing.T) {
+	InitCredsSvc()
+	credential := creds.Creds{
+		Id:        "oauth2-bearer-auth-unit",
+		CredsType: constants.CT_OAuth2,
+		Creds: creds.OAuth2Creds{
+			AccessToken: "oauth-access-token", RefreshToken: "oauth-refresh-token",
+			ExpirationDate: time.Now().Add(time.Hour), TokenURL: "https://api.example.com/token",
+			ClientID: "client", ClientSecret: "secret",
+		},
+	}
+	if errs := SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+		t.Fatalf("SetCreds() errors = %v", errs)
+	}
+
+	request, err := InitAuthorizationIfNeeded(hm.ApiCall{
+		CredsId: credential.Id, AuthMethod: constants.AM_Bearer,
+		Request: hm.Request{Method: "GET", BaseUrl: "https://api.example.com"},
+	})
+	if err != nil {
+		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
+	}
+	if len(request.Headers) != 1 || request.Headers[0].Name != "Authorization" {
+		t.Fatalf("headers = %#v, want one Authorization header", request.Headers)
+	}
+	if request.Headers[0].Value == nil || *request.Headers[0].Value != "Bearer oauth-access-token" {
+		t.Errorf("Authorization = %v, want Bearer oauth-access-token", request.Headers[0].Value)
+	}
+}
+
 func TestInitAuthorizationIfNeededQueryAuth(t *testing.T) {
 	InitCredsSvc()
 	credential := creds.Creds{
