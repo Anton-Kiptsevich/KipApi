@@ -384,25 +384,29 @@ func TestGetAWSRequestTimeWithoutDate(t *testing.T) {
 
 func TestAWSCanonicalURI(t *testing.T) {
 	tests := []struct {
-		input string
-		want  string
+		input   string
+		service string
+		want    string
 	}{
-		{input: "", want: "/"},
-		{input: "/", want: "/"},
-		{input: "/simple/path", want: "/simple/path"},
-		{input: "/a%2fb", want: "/a%252fb"},
-		{input: "/a b", want: "/a%20b"},
-		{input: "/café", want: "/caf%C3%A9"},
-		{input: "/a+b", want: "/a%2Bb"},
+		{input: "", service: "execute-api", want: "/"},
+		{input: "/", service: "execute-api", want: "/"},
+		{input: "/simple/path", service: "execute-api", want: "/simple/path"},
+		{input: "/a%2fb", service: "execute-api", want: "/a%252fb"},
+		{input: "/a b", service: "execute-api", want: "/a%2520b"},
+		{input: "/café", service: "execute-api", want: "/caf%25C3%25A9"},
+		{input: "/a+b", service: "execute-api", want: "/a%2Bb"},
+		{input: "/a%2fb", service: "s3", want: "/a%2Fb"},
+		{input: "/a b", service: "s3", want: "/a%20b"},
+		{input: "/café", service: "s3", want: "/caf%C3%A9"},
 	}
 
 	for _, test := range tests {
-		t.Run(test.input, func(t *testing.T) {
+		t.Run(test.service+test.input, func(t *testing.T) {
 			parsedURL, err := url.Parse("https://api.example.com" + test.input)
 			if err != nil {
 				t.Fatalf("url.Parse() error = %v", err)
 			}
-			got, err := awsCanonicalURI(parsedURL)
+			got, err := awsCanonicalURI(parsedURL, test.service)
 			if err != nil {
 				t.Fatalf("awsCanonicalURI() error = %v", err)
 			}
