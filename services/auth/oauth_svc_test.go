@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"net/http"
 	"strings"
 	"testing"
 
