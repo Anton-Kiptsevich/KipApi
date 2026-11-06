@@ -5,8 +5,10 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Anton-Kiptsevich/KipApi/constants"
+	"github.com/Anton-Kiptsevich/KipApi/internal/utils"
 	"github.com/Anton-Kiptsevich/KipApi/models/creds"
 	hm "github.com/Anton-Kiptsevich/KipApi/models/http"
 )
@@ -152,4 +154,126 @@ func TestAWSV4AuthorizationHeaders(t *testing.T) {
 	if _, err := hex.DecodeString(signature); err != nil {
 		t.Errorf("AWS4 signature is not hexadecimal: %v", err)
 	}
+}
+
+func TestAWSV4AuthorizationOverwritesExistingHeadersWhenDateExists(t *testing.T) {
+	InitCredsSvc()
+
+	credential := awsV4TestCreds("aws-v4-overwrite-existing-date")
+	if errs := SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+		t.Fatalf("SetCreds() errors = %v", errs)
+	}
+
+	const body = "payload"
+	payloadHash := sha256.Sum256([]byte(body))
+	payloadHashValue := hex.EncodeToString(payloadHash[:])
+	existingAuthorization := "caller-authorization"
+	existingPayloadHash := payloadHashValue
+	existingDate := "20261106T090000Z"
+
+	request, err := InitAuthorizationIfNeeded(hm.ApiCall{
+		CredsId:    credential.Id,
+		AuthMethod: constants.AM_AWS,
+		Request: hm.Request{
+			Method:  "POST",
+			BaseUrl: "https://api.example.com",
+			Path:    "/resource",
+			Body:    body,
+			Headers: []hm.Header{
+				{Name: "Authorization", Value: &existingAuthorization},
+				{Name: "X-Amz-Content-Sha256", Value: &existingPayloadHash},
+				{Name: "X-Amz-Date", Value: &existingDate},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
+	}
+
+	headerValues := awsV4HeaderValues(request.Headers)
+	if headerValues["authorization"] == existingAuthorization {
+		t.Error("existing Authorization header was not replaced")
+	}
+	if headerValues["x-amz-content-sha256"] != payloadHashValue {
+		t.Errorf("X-Amz-Content-Sha256 = %q, want %q", headerValues["x-amz-content-sha256"], payloadHashValue)
+	}
+	if headerValues["x-amz-date"] != existingDate {
+		t.Errorf("X-Amz-Date = %q, want existing value %q", headerValues["x-amz-date"], existingDate)
+	}
+	if len(request.Headers) != 3 {
+		t.Errorf("got %d headers, want 3", len(request.Headers))
+	}
+}
+
+func TestAWSV4AuthorizationPreservesExistingHeadersWithoutDate(t *testing.T) {
+	InitCredsSvc()
+
+	credential := awsV4TestCreds("aws-v4-preserve-without-date")
+	if errs := SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+		t.Fatalf("SetCreds() errors = %v", errs)
+	}
+
+	const body = "payload"
+	payloadHash := sha256.Sum256([]byte(body))
+	payloadHashValue := hex.EncodeToString(payloadHash[:])
+	existingAuthorization := "caller-authorization"
+	existingPayloadHash := payloadHashValue
+
+	request, err := InitAuthorizationIfNeeded(hm.ApiCall{
+		CredsId:    credential.Id,
+		AuthMethod: constants.AM_AWS,
+		Request: hm.Request{
+			Method:  "POST",
+			BaseUrl: "https://api.example.com",
+			Path:    "/resource",
+			Body:    body,
+			Headers: []hm.Header{
+				{Name: "Authorization", Value: &existingAuthorization},
+				{Name: "X-Amz-Content-Sha256", Value: &existingPayloadHash},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
+	}
+
+	headerValues := awsV4HeaderValues(request.Headers)
+	if headerValues["authorization"] != existingAuthorization {
+		t.Errorf("Authorization = %q, want existing value %q", headerValues["authorization"], existingAuthorization)
+	}
+	if headerValues["x-amz-content-sha256"] != payloadHashValue {
+		t.Errorf("X-Amz-Content-Sha256 = %q, want existing value %q", headerValues["x-amz-content-sha256"], payloadHashValue)
+	}
+	if _, exists := headerValues["x-amz-date"]; !exists {
+		t.Error("generated X-Amz-Date header is missing")
+	}
+	if _, err := time.Parse(utils.GetTimeFormatPattern(), headerValues["x-amz-date"]); err != nil {
+		t.Errorf("generated X-Amz-Date has invalid format: %v", err)
+	}
+	if len(request.Headers) != 3 {
+		t.Errorf("got %d headers, want 3", len(request.Headers))
+	}
+}
+
+func awsV4TestCreds(id string) creds.Creds {
+	return creds.Creds{
+		Id:        id,
+		CredsType: constants.CT_AWS,
+		Creds: creds.AWSV4Creds{
+			AccessKeyID:     "test-access-key",
+			SecretAccessKey: "test-secret-key",
+			Region:          "us-east-1",
+			Service:         "execute-api",
+		},
+	}
+}
+
+func awsV4HeaderValues(headers []hm.Header) map[string]string {
+	values := make(map[string]string, len(headers))
+	for _, header := range headers {
+		if header.Value != nil {
+			values[strings.ToLower(header.Name)] = *header.Value
+		}
+	}
+	return values
 }
