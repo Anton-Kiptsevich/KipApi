@@ -362,8 +362,14 @@ func TestAWSV4AuthorizationHeaders(t *testing.T) {
 		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
 	}
 
-	if len(request.Headers) != 3 {
-		t.Fatalf("got %d headers, want 3", len(request.Headers))
+	if len(request.Headers) != 4 {
+		t.Fatalf("got %d headers, want 4", len(request.Headers))
+	}
+	if count := awsV4HeaderCount(request.Headers, "Date"); count != 1 {
+		t.Errorf("Date header count = %d, want 1", count)
+	}
+	if got := awsV4HeaderValues(request.Headers)["date"]; got != date {
+		t.Errorf("Date = %q, want original value %q", got, date)
 	}
 	for _, name := range []string{"Authorization", "X-Amz-Content-Sha256", "X-Amz-Date"} {
 		if count := awsV4HeaderCount(request.Headers, name); count != 1 {
