@@ -61,7 +61,7 @@ func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) ([]hm.Head
 		host = net.JoinHostPort(parsedURL.Hostname(), parsedURL.Port())
 	}
 
-	canonicalURI, err := awsCanonicalURI(parsedURL)
+	canonicalURI, err := awsCanonicalURI(parsedURL, awsCreds.Service)
 	if err != nil {
 		return nil, false, err
 	}
@@ -131,30 +131,38 @@ func getAWSRequestTime(headers []hm.Header) (time.Time, string, bool, error) {
 	return t, value, true, nil
 }
 
-func awsCanonicalURI(u *url.URL) (string, error) {
+func awsCanonicalURI(u *url.URL, service string) (string, error) {
 	path := u.EscapedPath()
 	if path == "" {
 		path = "/"
 	}
-	var result strings.Builder
-	for i := 0; i < len(path); i++ {
-		c := path[i]
-		if c == '%' && i+2 < len(path) && utils.IsHex(path[i+1]) && utils.IsHex(path[i+2]) {
-			result.WriteByte('%')
-			result.WriteByte(byte(strings.ToUpper(string(path[i+1]))[0]))
-			result.WriteByte(byte(strings.ToUpper(string(path[i+2]))[0]))
-			i += 2
-			continue
+
+	// Amazon S3 is the exception: its canonical URI is encoded only once.
+	if strings.EqualFold(service, "s3") {
+		var result strings.Builder
+		for i := 0; i < len(path); i++ {
+			c := path[i]
+			if c == '%' && i+2 < len(path) && utils.IsHex(path[i+1]) && utils.IsHex(path[i+2]) {
+				result.WriteByte('%')
+				result.WriteByte(byte(strings.ToUpper(string(path[i+1]))[0]))
+				result.WriteByte(byte(strings.ToUpper(string(path[i+2]))[0]))
+				i += 2
+				continue
+			}
+			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+				(c >= '0' && c <= '9') || strings.ContainsRune("-_.~/", rune(c)) {
+				result.WriteByte(c)
+			} else {
+				result.WriteByte('%')
+				result.WriteString(strings.ToUpper(hex.EncodeToString([]byte{c})))
+			}
 		}
-		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-			(c >= '0' && c <= '9') || strings.ContainsRune("-_.~/", rune(c)) {
-			result.WriteByte(c)
-		} else {
-			result.WriteByte('%')
-			result.WriteString(strings.ToUpper(hex.EncodeToString([]byte{c})))
-		}
+		return result.String(), nil
 	}
-	return result.String(), nil
+
+	// For other AWS services, encode the escaped path again. In particular,
+	// the percent sign in an existing escape sequence must become "%25".
+	return awsURIEncode(path, true), nil
 }
 
 func awsCanonicalQuery(rawQuery string) (string, error) {
