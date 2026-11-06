@@ -1,6 +1,10 @@
 package auth
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
