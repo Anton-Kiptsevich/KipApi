@@ -98,6 +98,12 @@ func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) (string, [
 		aws4Algorithm, awsCreds.AccessKeyID, scope, signedHeaders, signature), extraHeaders, nil
 }
 
+
+func newAWSHeader(name, value string) hm.Header {
+	valueCopy := value
+	return hm.Header{Name: name, Value: &valueCopy}
+}
+
 func getAWSRequestTime(headers []hm.Header) (time.Time, string, bool, error) {
 	if value := requestHeaderValue(headers, awsDateHeader); value != "" {
 		t, err := time.Parse(utils.GetTimeFormatPattern(), value)
