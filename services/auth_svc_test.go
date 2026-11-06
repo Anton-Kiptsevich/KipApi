@@ -115,6 +115,32 @@ func TestInitAuthorizationIfNeededBasicAuth(t *testing.T) {
 	}
 }
 
+func TestInitAuthorizationIfNeededBearerAuthAddsStoredToken(t *testing.T) {
+	InitCredsSvc()
+	credential := creds.Creds{
+		Id:        "bearer-auth-add-unit",
+		CredsType: constants.CT_Bearer,
+		Creds:     creds.BearerCreds{Token: "stored-token"},
+	}
+	if errs := SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+		t.Fatalf("SetCreds() errors = %v", errs)
+	}
+
+	request, err := InitAuthorizationIfNeeded(hm.ApiCall{
+		CredsId: credential.Id, AuthMethod: constants.AM_Bearer,
+		Request: hm.Request{Method: "GET", BaseUrl: "https://api.example.com"},
+	})
+	if err != nil {
+		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
+	}
+	if len(request.Headers) != 1 || request.Headers[0].Name != "Authorization" {
+		t.Fatalf("headers = %#v, want one Authorization header", request.Headers)
+	}
+	if request.Headers[0].Value == nil || *request.Headers[0].Value != "Bearer stored-token" {
+		t.Errorf("Authorization = %v, want Bearer stored-token", request.Headers[0].Value)
+	}
+}
+
 func TestInitAuthorizationIfNeededBearerAuthPreservesCallerHeader(t *testing.T) {
 	InitCredsSvc()
 	credential := creds.Creds{
