@@ -79,6 +79,7 @@ func TestValidateHttpRequestHeaders(t *testing.T) {
 		{name: "missing value", headers: []hm.Header{{Name: "Accept"}}, wantErr: true},
 		{name: "both value forms", headers: []hm.Header{{Name: "Accept", Value: &value, Values: []string{"text/plain"}}}, wantErr: true},
 		{name: "duplicate name", headers: []hm.Header{{Name: "Accept", Value: &value}, {Name: "Accept", Values: []string{"text/plain"}}}, wantErr: true},
+		{name: "duplicate name ignoring case", headers: []hm.Header{{Name: "Accept", Value: &value}, {Name: "accept", Values: []string{"text/plain"}}}, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -101,6 +102,11 @@ func TestValidateHttpRequestCookies(t *testing.T) {
 		{name: "empty value", cookies: []hm.Cookie{{Name: "session"}}, wantErr: true},
 		{name: "invalid name", cookies: []hm.Cookie{{Name: "bad name", Value: "token"}}, wantErr: true},
 		{name: "invalid value", cookies: []hm.Cookie{{Name: "session", Value: "bad value"}}, wantErr: true},
+		{name: "invalid value with semicolon", cookies: []hm.Cookie{{Name: "session", Value: "bad;value"}}, wantErr: true},
+		{name: "invalid value with quote", cookies: []hm.Cookie{{Name: "session", Value: `bad"value`}}, wantErr: true},
+		{name: "invalid value with backslash", cookies: []hm.Cookie{{Name: "session", Value: `bad\value`}}, wantErr: true},
+		{name: "invalid non-ASCII value", cookies: []hm.Cookie{{Name: "session", Value: "токен"}}, wantErr: true},
+		{name: "valid boundary cookie value", cookies: []hm.Cookie{{Name: "session", Value: "!#$%&'()*+-./:<=>?@[]^_`{|}~"}}},
 		{name: "invalid domain", cookies: []hm.Cookie{{Name: "session", Value: "token", Domain: "example.com/path"}}, wantErr: true},
 		{name: "expires and max age", cookies: []hm.Cookie{{Name: "session", Value: "token", Expires: time.Now().Add(time.Hour), MaxAge: 3600}}, wantErr: true},
 		{name: "duplicate names ignoring case", cookies: []hm.Cookie{{Name: "session", Value: "one"}, {Name: "Session", Value: "two"}}, wantErr: true},
@@ -136,6 +142,7 @@ func TestValidateCreds(t *testing.T) {
 		{"cookie with expires", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session", Value: "token", Expires: time.Now().Add(time.Hour)}}}}},
 		{"cookie with max age", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session", Value: "token", MaxAge: 3600}}}}},
 		{"cookie with optional attributes", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session", Value: "token", Path: "/", Domain: "example.com"}}}}},
+		{"aws v4", creds.Creds{CredsType: constants.CT_AWS, Creds: creds.AWSV4Creds{AccessKeyID: "access", SecretAccessKey: "secret", Region: "eu-west-1", Service: "execute-api"}}},
 	}
 	for _, tt := range valid {
 		t.Run(tt.name, func(t *testing.T) {
@@ -154,6 +161,12 @@ func TestValidateCreds(t *testing.T) {
 		{"unknown type", creds.Creds{CredsType: "unknown", Creds: struct{}{}}},
 		{"unknown hmac placeholder", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", Signature: "{future:anything}"}}},
 		{"cookie wrong model", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.BearerCreds{Token: "token"}}},
+		{"cookie invalid value", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session", Value: "bad value"}}}}},
+		{"aws wrong model", creds.Creds{CredsType: constants.CT_AWS, Creds: creds.BearerCreds{Token: "token"}}},
+		{"aws missing access key id", creds.Creds{CredsType: constants.CT_AWS, Creds: creds.AWSV4Creds{SecretAccessKey: "secret", Region: "eu-west-1", Service: "execute-api"}}},
+		{"aws missing secret access key", creds.Creds{CredsType: constants.CT_AWS, Creds: creds.AWSV4Creds{AccessKeyID: "access", Region: "eu-west-1", Service: "execute-api"}}},
+		{"aws missing region", creds.Creds{CredsType: constants.CT_AWS, Creds: creds.AWSV4Creds{AccessKeyID: "access", SecretAccessKey: "secret", Service: "execute-api"}}},
+		{"aws missing service", creds.Creds{CredsType: constants.CT_AWS, Creds: creds.AWSV4Creds{AccessKeyID: "access", SecretAccessKey: "secret", Region: "eu-west-1"}}},
 		{"cookie list empty", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{}}},
 		{"cookie name empty", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Value: "token"}}}}},
 		{"cookie value empty", creds.Creds{CredsType: constants.CT_Cookie, Creds: creds.CookieCreds{Cookies: []hm.Cookie{{Name: "session"}}}}},
@@ -177,7 +190,7 @@ func TestValidateAuthMethod(t *testing.T) {
 		{constants.AM_Bearer, constants.CT_OAuth2}, {constants.AM_Header, constants.CT_ApiKey},
 		{constants.AM_Query, constants.CT_ApiKey}, {constants.AM_Digest, constants.CT_Digest},
 		{constants.AM_MTLS, constants.CT_MTLS}, {constants.AM_HMAC, constants.CT_HMAC},
-		{constants.AM_Cookie, constants.CT_Cookie},
+		{constants.AM_Cookie, constants.CT_Cookie}, {constants.AM_AWS, constants.CT_AWS},
 	}
 	for _, tt := range valid {
 		t.Run(tt.method+"/"+tt.credsType, func(t *testing.T) {
@@ -189,7 +202,7 @@ func TestValidateAuthMethod(t *testing.T) {
 	invalid := []struct{ method, credsType string }{
 		{constants.AM_Basic, constants.CT_Bearer}, {constants.AM_Bearer, constants.CT_ApiKey},
 		{constants.AM_Header, constants.CT_Bearer}, {constants.AM_Query, constants.CT_OAuth2},
-		{constants.AM_Cookie, constants.CT_Bearer},
+		{constants.AM_Cookie, constants.CT_Bearer}, {constants.AM_AWS, constants.CT_Bearer},
 		{"unknown", constants.CT_Basic},
 	}
 	for _, tt := range invalid {
