@@ -69,24 +69,24 @@ func TestGetAWSV4AuthorizationWithoutDate(t *testing.T) {
 		t.Fatalf("GetAWSV4Authorization() returned %d headers, want 3", len(headers))
 	}
 
-	headerValues := make(map[string]string, len(headers))
-	for _, header := range headers {
-		if header.Value != nil {
-			headerValues[header.Name] = *header.Value
-		}
+	if got := awsV4TestHeaderValue(headers, "Authorization"); got == "" {
+		t.Error("Authorization header is missing or empty")
 	}
-	if _, exists := headerValues["Authorization"]; !exists {
-		t.Error("Authorization header is missing")
+	const wantPayloadHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	if got := awsV4TestHeaderValue(headers, awsPayloadHashHeader); got != wantPayloadHash {
+		t.Errorf("%s = %q, want %q", awsPayloadHashHeader, got, wantPayloadHash)
 	}
-	if _, exists := headerValues[awsPayloadHashHeader]; !exists {
-		t.Errorf("%s header is missing", awsPayloadHashHeader)
-	}
-	date, exists := headerValues[awsDateHeader]
-	if !exists {
-		t.Fatalf("%s header is missing", awsDateHeader)
+	date := awsV4TestHeaderValue(headers, awsDateHeader)
+	if date == "" {
+		t.Fatalf("%s header is missing or empty", awsDateHeader)
 	}
 	if _, err := time.Parse(utils.GetTimeFormatPattern(), date); err != nil {
 		t.Errorf("%s has invalid format %q: %v", awsDateHeader, date, err)
+	}
+	for _, name := range []string{"Authorization", awsPayloadHashHeader, awsDateHeader} {
+		if count := awsV4TestHeaderCount(headers, name); count != 1 {
+			t.Errorf("%s header count = %d, want 1", name, count)
+		}
 	}
 }
 
@@ -193,8 +193,14 @@ func TestGetAWSV4AuthorizationPrefersAWSDateHeader(t *testing.T) {
 	if len(headers) != 2 {
 		t.Fatalf("GetAWSV4Authorization() returned %d headers, want 2", len(headers))
 	}
-	if awsV4TestHeaderValue(headers, awsDateHeader) != "" {
-		t.Errorf("GetAWSV4Authorization() unexpectedly returned an existing %s header", awsDateHeader)
+	if awsV4TestHeaderCount(headers, "Authorization") != 1 {
+		t.Error("GetAWSV4Authorization() must return exactly one Authorization header")
+	}
+	if awsV4TestHeaderCount(headers, awsPayloadHashHeader) != 1 {
+		t.Errorf("GetAWSV4Authorization() must return exactly one %s header", awsPayloadHashHeader)
+	}
+	if count := awsV4TestHeaderCount(headers, awsDateHeader); count != 0 {
+		t.Errorf("GetAWSV4Authorization() returned %d %s headers, want 0", count, awsDateHeader)
 	}
 }
 
@@ -521,6 +527,16 @@ func testAWSV4Creds() creds.AWSV4Creds {
 		Region:          "us-east-1",
 		Service:         "execute-api",
 	}
+}
+
+func awsV4TestHeaderCount(headers []hm.Header, name string) int {
+	count := 0
+	for _, header := range headers {
+		if strings.EqualFold(header.Name, name) {
+			count++
+		}
+	}
+	return count
 }
 
 func awsV4TestHeaderValue(headers []hm.Header, name string) string {
