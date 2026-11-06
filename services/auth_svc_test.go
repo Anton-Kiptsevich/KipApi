@@ -168,7 +168,6 @@ func TestAWSV4AuthorizationOverwritesExistingHeadersWhenDateExists(t *testing.T)
 		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
 	}
 
-	headerValues := awsV4HeaderValues(request.Headers)
 	if len(request.Headers) != 3 {
 		t.Fatalf("got %d headers, want 3", len(request.Headers))
 	}
@@ -176,7 +175,10 @@ func TestAWSV4AuthorizationOverwritesExistingHeadersWhenDateExists(t *testing.T)
 	if request.Headers[0].Value == &existingAuthorization {
 		t.Error("existing Authorization header was not replaced")
 	}
-	if request.Headers[0].Value == nil || *request.Headers[0].Value == existingAuthorization {
+	if request.Headers[0].Value == nil {
+		t.Fatal("generated Authorization header has nil value")
+	}
+	if *request.Headers[0].Value == existingAuthorization {
 		t.Error("Authorization header does not contain the generated signature")
 	}
 	if !strings.HasPrefix(*request.Headers[0].Value, "AWS4-HMAC-SHA256 Credential=test-access-key/20261106/us-east-1/execute-api/aws4_request, SignedHeaders=") {
