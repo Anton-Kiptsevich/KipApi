@@ -1,7 +1,9 @@
 package services
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -115,4 +117,70 @@ func TestMakeApiCallDigestChallenge(t *testing.T) {
 	if err != nil { t.Fatalf("MakeApiCall() error = %v", err) }
 	if requestCount != 2 { t.Fatalf("request count = %d, want initial challenge and authenticated request", requestCount) }
 	if response.Status != "204 No Content" { t.Fatalf("response status = %q, want 204 No Content", response.Status) }
+}
+
+
+func TestMakeApiCallAWSV4Authorization(t *testing.T) {
+	InitCredsSvc()
+	credential := creds.Creds{
+		Id: "aws-v4-integration", CredsType: constants.CT_AWS,
+		Creds: creds.AWSV4Creds{
+			AccessKeyID: "test-access-key", SecretAccessKey: "test-secret-key",
+			Region: "us-east-1", Service: "execute-api",
+		},
+	}
+	if errs := SetCreds([]creds.Creds{credential}, false); len(errs) != 0 {
+		t.Fatalf("SetCreds() errors = %v", errs)
+	}
+
+	const body = `{"message":"hello"}`
+	const requestDate = "20261106T090000Z"
+	payloadHash := sha256.Sum256([]byte(body))
+	expectedPayloadHash := hex.EncodeToString(payloadHash[:])
+	contentType := "application/json"
+	date := requestDate
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-Amz-Date"); got != requestDate {
+			t.Errorf("X-Amz-Date = %q, want %q", got, requestDate)
+		}
+		if got := r.Header.Get("X-Amz-Content-Sha256"); got != expectedPayloadHash {
+			t.Errorf("X-Amz-Content-Sha256 = %q, want %q", got, expectedPayloadHash)
+		}
+
+		authorization := r.Header.Get("Authorization")
+		const authorizationPrefix = "AWS4-HMAC-SHA256 Credential=test-access-key/20261106/us-east-1/execute-api/aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature="
+		if !strings.HasPrefix(authorization, authorizationPrefix) {
+			t.Errorf("Authorization = %q, want prefix %q", authorization, authorizationPrefix)
+		} else {
+			signature := strings.TrimPrefix(authorization, authorizationPrefix)
+			if len(signature) != 64 {
+				t.Errorf("AWS4 signature length = %d, want 64", len(signature))
+			}
+			if _, err := hex.DecodeString(signature); err != nil {
+				t.Errorf("AWS4 signature is not hexadecimal: %v", err)
+			}
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	response, err := MakeApiCall(hm.ApiCall{
+		CredsId: credential.Id, AuthMethod: constants.AM_AWS,
+		Request: hm.Request{
+			Method: http.MethodPost, BaseUrl: server.URL, Path: "/resource?z=last&a=first",
+			Body: body,
+			Headers: []hm.Header{
+				{Name: "Content-Type", Value: &contentType},
+				{Name: "X-Amz-Date", Value: &date},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("MakeApiCall() error = %v", err)
+	}
+	if response.Status != "204 No Content" {
+		t.Fatalf("response status = %q, want 204 No Content", response.Status)
+	}
 }
