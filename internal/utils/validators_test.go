@@ -227,6 +227,8 @@ func TestValidateAuthMethod(t *testing.T) {
 		{constants.AM_Basic, constants.CT_Bearer}, {constants.AM_Bearer, constants.CT_ApiKey},
 		{constants.AM_Header, constants.CT_Bearer}, {constants.AM_Query, constants.CT_OAuth2},
 		{constants.AM_Cookie, constants.CT_Bearer}, {constants.AM_AWS, constants.CT_Bearer},
+		{constants.AM_Digest, constants.CT_Bearer}, {constants.AM_HMAC, constants.CT_Bearer},
+		{constants.AM_MTLS, constants.CT_Bearer},
 		{"unknown", constants.CT_Basic},
 	}
 	for _, tt := range invalid {
