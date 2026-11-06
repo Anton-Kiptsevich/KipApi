@@ -234,7 +234,6 @@ func TestAWSV4AuthorizationPreservesExistingHeadersWithoutDate(t *testing.T) {
 		t.Fatalf("InitAuthorizationIfNeeded() error = %v", err)
 	}
 
-	headerValues := awsV4HeaderValues(request.Headers)
 	if len(request.Headers) != 3 {
 		t.Fatalf("got %d headers, want 3", len(request.Headers))
 	}
