@@ -75,6 +75,7 @@ func TestValidateHttpRequestHeaders(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "single value", headers: []hm.Header{{Name: "Accept", Value: &value}}},
+		{name: "empty name", headers: []hm.Header{{Name: "", Value: &value}}, wantErr: true},
 		{name: "multiple values", headers: []hm.Header{{Name: "Accept", Values: []string{"application/json", "text/plain"}}}},
 		{name: "missing value", headers: []hm.Header{{Name: "Accept"}}, wantErr: true},
 		{name: "both value forms", headers: []hm.Header{{Name: "Accept", Value: &value, Values: []string{"text/plain"}}}, wantErr: true},
@@ -162,6 +163,9 @@ func TestValidateCreds(t *testing.T) {
 		{"oauth missing refresh token", creds.Creds{CredsType: constants.CT_OAuth2, Creds: creds.OAuth2Creds{AccessToken: "access", ExpirationDate: time.Now().Add(time.Hour), TokenURL: "https://example.com/token", ClientID: "client", ClientSecret: "secret"}}},
 		{"oauth missing token url", creds.Creds{CredsType: constants.CT_OAuth2, Creds: creds.OAuth2Creds{AccessToken: "access", RefreshToken: "refresh", ExpirationDate: time.Now().Add(time.Hour), ClientID: "client", ClientSecret: "secret"}}},
 		{"hmac missing algorithm", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", Signature: "{method}"}}},
+		{"hmac missing secret key", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", Signature: "{method}"}}},
+		{"hmac missing signature header name", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SecretKey: "secret", SignatureEncoding: "hex", Signature: "{method}"}}},
+		{"hmac missing signature template", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature"}}},
 		{"hmac unsupported algorithm", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: "sha3", SecretKey: "secret", SignatureEncoding: "hex", SignatureHeaderName: "X-Signature", Signature: "{method}"}}},
 		{"hmac unsupported encoding", creds.Creds{CredsType: constants.CT_HMAC, Creds: creds.HMACCreds{Algorithm: constants.HA_SHA256, SecretKey: "secret", SignatureEncoding: "raw", SignatureHeaderName: "X-Signature", Signature: "{method}"}}},
 
