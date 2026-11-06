@@ -208,6 +208,9 @@ func TestGetAWSV4AuthorizationPrefersAWSDateHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAWSV4Authorization() error = %v", err)
 	}
+	if !overrideExistingHeaders {
+		t.Error("overrideExistingHeaders = false, want true when X-Amz-Date is present")
+	}
 	if len(headers) != 2 {
 		t.Fatalf("GetAWSV4Authorization() returned %d headers, want 2", len(headers))
 	}
@@ -236,6 +239,9 @@ func TestGetAWSV4AuthorizationAcceptsMatchingPayloadHash(t *testing.T) {
 	}, testAWSV4Creds())
 	if err != nil {
 		t.Fatalf("GetAWSV4Authorization() error = %v", err)
+	}
+	if overrideExistingHeaders {
+		t.Error("overrideExistingHeaders = true, want false when no date header is present")
 	}
 	if got := awsV4TestHeaderValue(headers, awsPayloadHashHeader); got != payloadHash {
 		t.Errorf("%s = %q, want %q", awsPayloadHashHeader, got, payloadHash)
@@ -524,6 +530,9 @@ func TestGetAWSV4AuthorizationMatchesAWSReferenceVector(t *testing.T) {
 	headers, overrideExistingHeaders, err := GetAWSV4Authorization(request, credentials)
 	if err != nil {
 		t.Fatalf("GetAWSV4Authorization() error = %v", err)
+	}
+	if !overrideExistingHeaders {
+		t.Error("overrideExistingHeaders = false, want true when Date is present")
 	}
 
 	const wantAuthorization = "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20110909/us-east-1/host/aws4_request, SignedHeaders=date;host;x-amz-content-sha256;x-amz-date, Signature=8669346105352fcd40f85d6d892aed321806bbc8c65a5aa324eb6cbc4f974838"
