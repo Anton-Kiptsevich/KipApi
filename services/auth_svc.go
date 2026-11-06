@@ -183,8 +183,8 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 		if !ok {
 			panic("Auth Method/Creds Type discrepancy")
 		}
-		value := "Basic " + base64.StdEncoding.EncodeToString([]byte(basic.Username+":"+basic.Password))
-		authHeaders = append(authHeaders, hm.Header{Name: "Authorization", Value: &value})
+		value := "Basic " + base64.StdEncoding.EncodeToString([]byte(basic.Username + ":" + basic.Password))
+		authHeaders = append(authHeaders, hm.Header{ Name: "Authorization", Value: &value })
 
 	case constants.AM_Bearer:
 		var token string
@@ -205,7 +205,7 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 			panic("Auth Method/Creds Type discrepancy")
 		}
 		value := "Bearer " + token
-		authHeaders = append(authHeaders, hm.Header{Name: "Authorization", Value: &value})
+		authHeaders = append(authHeaders, hm.Header{ Name: "Authorization", Value: &value })
 
 	case constants.AM_Header:
 		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
@@ -213,14 +213,14 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 			panic("Auth Method/Creds Type discrepancy")
 		}
 		value := apiKey.ApiKey
-		authHeaders = append(authHeaders, hm.Header{Name: apiKey.FieldName, Value: &value})
+		authHeaders = append(authHeaders, hm.Header{ Name: apiKey.FieldName, Value: &value })
 
 	case constants.AM_Digest:
 		value, err := auth.GetDigestAuthorization(call.Request, currentCreds)
 		if err != nil {
 			return call.Request, err
 		}
-		authHeaders = append(authHeaders, hm.Header{Name: "Authorization", Value: &value})
+		authHeaders = append(authHeaders, hm.Header{ Name: "Authorization", Value: &value })
 
 	case constants.AM_HMAC:
 		hmacCreds, ok := currentCreds.Creds.(creds.HMACCreds)
@@ -231,7 +231,7 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 		if err != nil {
 			return call.Request, err
 		}
-		authHeaders = append(authHeaders, hm.Header{Name: hmacCreds.SignatureHeaderName, Value: &value})
+		authHeaders = append(authHeaders, hm.Header{ Name: hmacCreds.SignatureHeaderName, Value: &value })
 
 	case constants.AM_AWS:
 		awsCreds, ok := currentCreds.Creds.(creds.AWSV4Creds)
@@ -242,7 +242,7 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 		if err != nil {
 			return call.Request, err
 		}
-		authHeaders = append(authHeaders, hm.Header{Name: "Authorization", Value: &value})
+		authHeaders = append(authHeaders, hm.Header{ Name: "Authorization", Value: &value })
 		authHeaders = append(authHeaders, awsHeaders...)
 		owerrideExisted = len(awsHeaders) == 2
 	}

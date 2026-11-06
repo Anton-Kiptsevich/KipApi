@@ -36,7 +36,7 @@ func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) (string, [
 	if err != nil {
 		return "", nil, err
 	}
-	date := requestTime.Format("20060102")
+	date := requestTime.Format(utils.GetDateFormatPattern())
 
 	payloadHash := sha256.Sum256([]byte(req.Body))
 	payloadHashHex := hex.EncodeToString(payloadHash[:])
@@ -88,7 +88,7 @@ func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) (string, [
 	}, "\n")
 
 	signingKey := utils.CalculateHMACChain(
-		[]byte("AWS4"+awsCreds.SecretAccessKey),
+		[]byte("AWS4" + awsCreds.SecretAccessKey),
 		[]string{date, awsCreds.Region, awsCreds.Service, aws4Terminator},
 		constants.HA_SHA256,
 	)
@@ -100,7 +100,7 @@ func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) (string, [
 
 func newAWSHeader(name, value string) hm.Header {
 	valueCopy := value
-	return hm.Header{Name: name, Value: &valueCopy}
+	return hm.Header{ Name: name, Value: &valueCopy }
 }
 
 func getAWSRequestTime(headers []hm.Header) (time.Time, string, bool, error) {
@@ -178,7 +178,7 @@ func awsCanonicalQuery(rawQuery string) (string, error) {
 }
 
 func awsCanonicalHeaders(headers []hm.Header, host string) (string, string) {
-	values := map[string][]string{"host": {strings.TrimSpace(host)}}
+	values := map[string][]string{"host": { strings.TrimSpace(host) }}
 	for _, header := range headers {
 		name := strings.ToLower(strings.TrimSpace(header.Name))
 		if name == "" || name == "authorization" || name == "host" {
