@@ -16,14 +16,13 @@ import (
 )
 
 const (
-	aws4Algorithm = "AWS4-HMAC-SHA256"
-	aws4Terminator = "aws4_request"
-	awsDateHeader = "X-Amz-Date"
+	aws4Algorithm         = "AWS4-HMAC-SHA256"
+	aws4Terminator        = "aws4_request"
+	awsDateHeader         = "X-Amz-Date"
 	awsPayloadHashHeader = "X-Amz-Content-Sha256"
 )
 
 func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) (string, []hm.Header, error) {
-
 	parsedURL, err := url.Parse(req.BaseUrl + req.Path)
 	if err != nil {
 		return "", nil, fmt.Errorf("parse request URL: %w", err)
@@ -97,7 +96,6 @@ func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) (string, [
 	return fmt.Sprintf("%s Credential=%s/%s, SignedHeaders=%s, Signature=%s",
 		aws4Algorithm, awsCreds.AccessKeyID, scope, signedHeaders, signature), extraHeaders, nil
 }
-
 
 func newAWSHeader(name, value string) hm.Header {
 	valueCopy := value

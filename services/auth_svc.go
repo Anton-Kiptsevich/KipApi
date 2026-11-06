@@ -180,7 +180,9 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 	switch call.AuthMethod {
 	case constants.AM_Basic:
 		basic, ok := currentCreds.Creds.(creds.BasicCreds)
-		if !ok { panic("Auth Method/Creds Type discrepancy") }
+		if !ok {
+			panic("Auth Method/Creds Type discrepancy")
+		}
 		value := "Basic " + base64.StdEncoding.EncodeToString([]byte(basic.Username+":"+basic.Password))
 		authHeaders = append(authHeaders, hm.Header{Name: "Authorization", Value: &value})
 
@@ -189,11 +191,15 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 		switch currentCreds.CredsType {
 		case constants.CT_Bearer:
 			bearer, ok := currentCreds.Creds.(creds.BearerCreds)
-			if !ok { panic("Auth Method/Creds Type discrepancy") }
+			if !ok {
+				panic("Auth Method/Creds Type discrepancy")
+			}
 			token = bearer.Token
 		case constants.CT_OAuth2:
 			oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
-			if !ok { panic("Auth Method/Creds Type discrepancy") }
+			if !ok {
+				panic("Auth Method/Creds Type discrepancy")
+			}
 			token = oauth2.AccessToken
 		default:
 			panic("Auth Method/Creds Type discrepancy")
@@ -203,27 +209,39 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 
 	case constants.AM_Header:
 		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
-		if !ok { panic("Auth Method/Creds Type discrepancy") }
+		if !ok {
+			panic("Auth Method/Creds Type discrepancy")
+		}
 		value := apiKey.ApiKey
 		authHeaders = append(authHeaders, hm.Header{Name: apiKey.FieldName, Value: &value})
 
 	case constants.AM_Digest:
 		value, err := auth.GetDigestAuthorization(call.Request, currentCreds)
-		if err != nil { return call.Request, err }
+		if err != nil {
+			return call.Request, err
+		}
 		authHeaders = append(authHeaders, hm.Header{Name: "Authorization", Value: &value})
 
 	case constants.AM_HMAC:
 		hmacCreds, ok := currentCreds.Creds.(creds.HMACCreds)
-		if !ok { panic("Auth Method/Creds Type discrepancy") }
+		if !ok {
+			panic("Auth Method/Creds Type discrepancy")
+		}
 		value, err := auth.GetHMACSignature(call.Request, hmacCreds)
-		if err != nil { return call.Request, err }
+		if err != nil {
+			return call.Request, err
+		}
 		authHeaders = append(authHeaders, hm.Header{Name: hmacCreds.SignatureHeaderName, Value: &value})
 
 	case constants.AM_AWS:
 		awsCreds, ok := currentCreds.Creds.(creds.AWSV4Creds)
-		if !ok { panic("Auth Method/Creds Type discrepancy") }
+		if !ok {
+			panic("Auth Method/Creds Type discrepancy")
+		}
 		value, awsHeaders, err := auth.GetAWSV4Authorization(call.Request, awsCreds)
-		if err != nil { return call.Request, err }
+		if err != nil {
+			return call.Request, err
+		}
 		authHeaders = append(authHeaders, hm.Header{Name: "Authorization", Value: &value})
 		authHeaders = append(authHeaders, awsHeaders...)
 		owerrideExisted = len(awsHeaders) == 2

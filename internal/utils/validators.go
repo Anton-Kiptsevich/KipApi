@@ -57,12 +57,12 @@ func validateCookie(cookie hm.Cookie) error {
 		return fmt.Errorf("Cookie cannot contain both Expires and MaxAge")
 	}
 	if err := (&http.Cookie{
-		Name:   cookie.Name,
-		Value:  cookie.Value,
+		Name:    cookie.Name,
+		Value:   cookie.Value,
 		Expires: cookie.Expires,
-		MaxAge: cookie.MaxAge,
-		Path:   cookie.Path,
-		Domain: cookie.Domain,
+		MaxAge:  cookie.MaxAge,
+		Path:    cookie.Path,
+		Domain:  cookie.Domain,
 	}).Valid(); err != nil {
 		return fmt.Errorf("invalid Cookie: %w", err)
 	}
