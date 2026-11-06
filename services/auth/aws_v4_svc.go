@@ -23,25 +23,25 @@ const (
 	awsPayloadHashHeader = "X-Amz-Content-Sha256"
 )
 
-func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) (string, []hm.Header, error) {
+func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) ([]hm.Header, error) {
 	parsedURL, err := url.Parse(req.BaseUrl + req.Path)
 	if err != nil {
-		return "", nil, fmt.Errorf("parse request URL: %w", err)
+		return nil, fmt.Errorf("parse request URL: %w", err)
 	}
 	if parsedURL.Host == "" {
-		return "", nil, fmt.Errorf("request URL must contain a host")
+		return nil, fmt.Errorf("request URL must contain a host")
 	}
 
 	requestTime, timestamp, addDateHeader, err := getAWSRequestTime(req.Headers)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	date := requestTime.Format(utils.GetDateFormatPattern())
 
 	payloadHash := sha256.Sum256([]byte(req.Body))
 	payloadHashHex := hex.EncodeToString(payloadHash[:])
 	if existing := requestHeaderValue(req.Headers, awsPayloadHashHeader); existing != "" && existing != payloadHashHex {
-		return "", nil, fmt.Errorf("%s does not match the request body SHA-256", awsPayloadHashHeader)
+		return nil, fmt.Errorf("%s does not match the request body SHA-256", awsPayloadHashHeader)
 	}
 	extraHeaders := []hm.Header{newAWSHeader(awsPayloadHashHeader, payloadHashHex)}
 	signingHeaders := append([]hm.Header(nil), req.Headers...)
@@ -61,11 +61,11 @@ func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) (string, [
 
 	canonicalURI, err := awsCanonicalURI(parsedURL)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	canonicalQuery, err := awsCanonicalQuery(parsedURL.RawQuery)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	canonicalHeaders, signedHeaders := awsCanonicalHeaders(signingHeaders, host)
 
@@ -92,10 +92,11 @@ func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) (string, [
 		[]string{date, awsCreds.Region, awsCreds.Service, aws4Terminator},
 		constants.HA_SHA256,
 	)
-	signature := hex.EncodeToString(utils.CalculateHMACChain(signingKey, []string{stringToSign}, "SHA256"))
+	signature := hex.EncodeToString(utils.CalculateHMACChain(signingKey, []string{stringToSign}, constants.HA_SHA256))
 
-	return fmt.Sprintf("%s Credential=%s/%s, SignedHeaders=%s, Signature=%s",
-		aws4Algorithm, awsCreds.AccessKeyID, scope, signedHeaders, signature), extraHeaders, nil
+	authorization := fmt.Sprintf("%s Credential=%s/%s, SignedHeaders=%s, Signature=%s",
+		aws4Algorithm, awsCreds.AccessKeyID, scope, signedHeaders, signature)
+	return append([]hm.Header{newAWSHeader("Authorization", authorization)}, extraHeaders...), nil
 }
 
 func newAWSHeader(name, value string) hm.Header {
@@ -133,7 +134,6 @@ func awsCanonicalURI(u *url.URL) (string, error) {
 	if path == "" {
 		path = "/"
 	}
-	hexDigits := utils.GetHexDigits()
 	var result strings.Builder
 	for i := 0; i < len(path); i++ {
 		c := path[i]
@@ -149,8 +149,7 @@ func awsCanonicalURI(u *url.URL) (string, error) {
 			result.WriteByte(c)
 		} else {
 			result.WriteByte('%')
-			result.WriteByte(hexDigits[c>>4])
-			result.WriteByte(hexDigits[c&15])
+			result.WriteString(strings.ToUpper(hex.EncodeToString([]byte{c})))
 		}
 	}
 	return result.String(), nil
@@ -214,7 +213,6 @@ func normalizeAWSHeaderValue(value string) string {
 }
 
 func awsURIEncode(value string, preserveSlash bool) string {
-	hexDigits := utils.GetHexDigits()
 	var result strings.Builder
 	for i := 0; i < len(value); i++ {
 		c := value[i]
@@ -224,8 +222,7 @@ func awsURIEncode(value string, preserveSlash bool) string {
 			result.WriteByte(c)
 		} else {
 			result.WriteByte('%')
-			result.WriteByte(hexDigits[c>>4])
-			result.WriteByte(hexDigits[c&15])
+			result.WriteString(strings.ToUpper(hex.EncodeToString([]byte{c})))
 		}
 	}
 	return result.String()
