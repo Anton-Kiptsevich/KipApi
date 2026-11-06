@@ -169,17 +169,27 @@ func TestAWSV4AuthorizationOverwritesExistingHeadersWhenDateExists(t *testing.T)
 	}
 
 	headerValues := awsV4HeaderValues(request.Headers)
-	if headerValues["authorization"] == existingAuthorization {
+	if len(request.Headers) != 3 {
+		t.Fatalf("got %d headers, want 3", len(request.Headers))
+	}
+
+	if request.Headers[0].Value == &existingAuthorization {
 		t.Error("existing Authorization header was not replaced")
 	}
-	if headerValues["x-amz-content-sha256"] != payloadHashValue {
-		t.Errorf("X-Amz-Content-Sha256 = %q, want %q", headerValues["x-amz-content-sha256"], payloadHashValue)
+	if request.Headers[0].Value == nil || *request.Headers[0].Value == existingAuthorization {
+		t.Error("Authorization header does not contain the generated signature")
 	}
-	if headerValues["x-amz-date"] != existingDate {
-		t.Errorf("X-Amz-Date = %q, want existing value %q", headerValues["x-amz-date"], existingDate)
+	if !strings.HasPrefix(*request.Headers[0].Value, "AWS4-HMAC-SHA256 Credential=test-access-key/20261106/us-east-1/execute-api/aws4_request, SignedHeaders=") {
+		t.Errorf("Authorization = %q, want generated AWS4 authorization", *request.Headers[0].Value)
 	}
-	if len(request.Headers) != 3 {
-		t.Errorf("got %d headers, want 3", len(request.Headers))
+	if request.Headers[1].Value == &existingPayloadHash {
+		t.Error("existing X-Amz-Content-Sha256 header was not replaced")
+	}
+	if request.Headers[1].Value == nil || *request.Headers[1].Value != payloadHashValue {
+		t.Errorf("X-Amz-Content-Sha256 = %v, want %q", request.Headers[1].Value, payloadHashValue)
+	}
+	if request.Headers[2].Value != &existingDate || *request.Headers[2].Value != existingDate {
+		t.Errorf("existing X-Amz-Date header was modified")
 	}
 }
 
@@ -216,20 +226,24 @@ func TestAWSV4AuthorizationPreservesExistingHeadersWithoutDate(t *testing.T) {
 	}
 
 	headerValues := awsV4HeaderValues(request.Headers)
-	if headerValues["authorization"] != existingAuthorization {
-		t.Errorf("Authorization = %q, want existing value %q", headerValues["authorization"], existingAuthorization)
-	}
-	if headerValues["x-amz-content-sha256"] != payloadHashValue {
-		t.Errorf("X-Amz-Content-Sha256 = %q, want existing value %q", headerValues["x-amz-content-sha256"], payloadHashValue)
-	}
-	if _, exists := headerValues["x-amz-date"]; !exists {
-		t.Error("generated X-Amz-Date header is missing")
-	}
-	if _, err := time.Parse(utils.GetTimeFormatPattern(), headerValues["x-amz-date"]); err != nil {
-		t.Errorf("generated X-Amz-Date has invalid format: %v", err)
-	}
 	if len(request.Headers) != 3 {
-		t.Errorf("got %d headers, want 3", len(request.Headers))
+		t.Fatalf("got %d headers, want 3", len(request.Headers))
+	}
+
+	if request.Headers[0].Value != &existingAuthorization || *request.Headers[0].Value != existingAuthorization {
+		t.Error("existing Authorization header was overwritten")
+	}
+	if request.Headers[1].Value != &existingPayloadHash || *request.Headers[1].Value != payloadHashValue {
+		t.Error("existing X-Amz-Content-Sha256 header was overwritten")
+	}
+	if !strings.EqualFold(request.Headers[2].Name, "X-Amz-Date") {
+		t.Errorf("third header name = %q, want X-Amz-Date", request.Headers[2].Name)
+	}
+	if request.Headers[2].Value == nil {
+		t.Fatal("generated X-Amz-Date header has nil value")
+	}
+	if _, err := time.Parse(utils.GetTimeFormatPattern(), *request.Headers[2].Value); err != nil {
+		t.Errorf("generated X-Amz-Date has invalid format: %v", err)
 	}
 }
 
