@@ -1,5 +1,7 @@
 # KipApi
 
+<sub>Current documentation: v1.3.0</sub>
+
 KipApi is a Go library for making HTTP requests to external APIs with reusable credential and authentication handling. It provides integration infrastructure—not API-specific clients, business logic, or persistent storage.
 
 ## Installation
@@ -194,6 +196,49 @@ You can also set cookies directly on `httpmodel.Request.Cookies`. If a request c
 
 KipApi sends the configured cookies with the request; it does not automatically refresh or renew them. Your application is responsible for obtaining updated cookies and updating the stored credentials when needed.
 
+## Digest authentication
+
+KipApi supports HTTP Digest authentication. Unlike Basic or Bearer authentication, Digest requires a server challenge: KipApi first sends the request to obtain the `WWW-Authenticate` challenge, calculates the response, and then sends the authenticated request.
+
+Register credentials with `creds.DigestCreds`, using `constants.CT_Digest` and `constants.AM_Digest`:
+
+- `Username`: Digest username.
+- `Password`: Digest password.
+
+Supported algorithms are `MD5` (the default when the server omits the algorithm), `MD5-sess`, and `SHA-256`. For the challenge's `qop` options, KipApi prefers `auth`; if it is unavailable, it uses `auth-int`. A challenge without `qop` is also supported.
+
+Example:
+
+```go
+credential := creds.Creds{
+    Id:        "digest-credential",
+    CredsType: constants.CT_Digest,
+    Creds: creds.DigestCreds{
+        Username: "YOUR_USERNAME",
+        Password: "YOUR_PASSWORD",
+    },
+}
+if errs := services.SetCreds([]creds.Creds{credential}, false); len(errs) > 0 {
+    for _, err := range errs {
+        log.Println("invalid credentials:", err)
+    }
+    return
+}
+
+call := httpmodel.ApiCall{
+    CredsId:    "digest-credential",
+    AuthMethod: constants.AM_Digest,
+    Request: httpmodel.Request{
+        Method:  "GET",
+        BaseUrl: "https://api.example.com",
+        Path:    "/protected",
+    },
+}
+response, err := services.MakeApiCall(call)
+```
+
+The target endpoint must issue a valid Digest challenge in its `WWW-Authenticate` response. For `auth-int`, the request body is included in the Digest calculation. KipApi does not persist credentials or manage the server's nonce lifecycle.
+
 ## HMAC authentication
 
 KipApi supports HMAC request signing with SHA-1, SHA-256, SHA-384, and SHA-512. Signatures can be encoded as Base64 or hexadecimal.
@@ -275,9 +320,29 @@ KipApi supports AWS Signature Version 4 using the standard signing process. Regi
 - `Region`: AWS region, such as `us-east-1`.
 - `Service`: AWS service identifier, such as `s3` or `execute-api`.
 
-Use `constants.CT_AWS` as the credential type and `constants.AM_AWS` as the authentication method. KipApi builds the canonical request from the HTTP request, derives the signing key, calculates the signature, and adds the `Authorization` header.
+Use `constants.CT_AWS` as the credential type and `constants.AM_AWS` as the authentication method. KipApi builds the canonical request from the HTTP request, derives the signing key, calculates the signature, and adds the AWS signing headers.
 
-The request must include an `X-Amz-Date` header in the format `YYYYMMDDTHHMMSSZ`, or a valid HTTP `Date` header. KipApi calculates the SHA-256 payload hash and adds `X-Amz-Content-Sha256`. Any existing value of that header must match the request body hash.
+KipApi supports the standard AWS Signature V4 canonicalization rules: ordinary AWS services use double URI encoding for the canonical path, while S3 uses the single-encoding exception. Query parameters and signed headers are canonicalized before signing.
+
+**Date and existing-header behavior**
+
+KipApi determines the signing time in this order:
+
+1. If the request already contains `X-Amz-Date`, it parses and uses that value.
+2. Otherwise, if the request contains an HTTP `Date` header, it parses that value and derives `X-Amz-Date`.
+3. If neither header is present, KipApi uses the current UTC time and generates `X-Amz-Date`.
+
+The generated payload hash is sent in `X-Amz-Content-Sha256`. If the request already contains this header, its value must match the SHA-256 hash of the request body; otherwise, signing returns an error.
+
+**When existing headers are overwritten**
+
+AWS signing has a deliberate override rule:
+
+- If the request contains either `X-Amz-Date` **or** `Date`, KipApi replaces existing `Authorization` and `X-Amz-Content-Sha256` headers with the values generated for this AWS signature.
+- The caller-provided `X-Amz-Date` or `Date` value itself is not replaced. When only `Date` is supplied, KipApi also adds the derived `X-Amz-Date`.
+- If neither `X-Amz-Date` nor `Date` is supplied, existing `Authorization` and `X-Amz-Content-Sha256` headers are preserved. KipApi still adds `X-Amz-Date` using the current UTC time. If those signing headers were absent, KipApi adds them as usual.
+
+This means that supplying a date header opts into KipApi taking ownership of the generated AWS `Authorization` and payload-hash headers. Do not supply `Date` or `X-Amz-Date` if you need to preserve caller-provided values for those two generated headers.
 
 Example:
 
