@@ -22,32 +22,36 @@ const (
 	awsPayloadHashHeader = "X-Amz-Content-Sha256"
 )
 
-func GetAWSV4Authorization(req *hm.Request, awsCreds creds.AWSV4Creds) (string, error) {
-	if req == nil {
-		return "", fmt.Errorf("request must not be nil")
-	}
+func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) (string, []hm.Header, error) {
 
 	parsedURL, err := url.Parse(req.BaseUrl + req.Path)
 	if err != nil {
-		return "", fmt.Errorf("parse request URL: %w", err)
+		return "", nil, fmt.Errorf("parse request URL: %w", err)
 	}
 	if parsedURL.Host == "" {
-		return "", fmt.Errorf("request URL must contain a host")
+		return "", nil, fmt.Errorf("request URL must contain a host")
 	}
 
-	requestTime, timestamp, err := getAWSRequestTime(req)
+	requestTime, timestamp, addDateHeader, err := getAWSRequestTime(req.Headers)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	date := requestTime.Format("20060102")
 
 	payloadHash := sha256.Sum256([]byte(req.Body))
 	payloadHashHex := hex.EncodeToString(payloadHash[:])
 	if existing := requestHeaderValue(req.Headers, awsPayloadHashHeader); existing != "" && existing != payloadHashHex {
-		return "", fmt.Errorf("%s does not match the request body SHA-256", awsPayloadHashHeader)
+		return "", nil, fmt.Errorf("%s does not match the request body SHA-256", awsPayloadHashHeader)
 	}
-	if strings.EqualFold(awsCreds.Service, "s3") || requestHeaderValue(req.Headers, awsPayloadHashHeader) != "" {
-		setRequestHeader(req, awsPayloadHashHeader, payloadHashHex)
+	extraHeaders := []hm.Header{newAWSHeader(awsPayloadHashHeader, payloadHashHex)}
+	signingHeaders := append([]hm.Header(nil), req.Headers...)
+	if requestHeaderValue(req.Headers, awsPayloadHashHeader) == "" {
+		signingHeaders = append(signingHeaders, extraHeaders[0])
+	}
+	if addDateHeader {
+		dateHeader := newAWSHeader(awsDateHeader, timestamp)
+		extraHeaders = append(extraHeaders, dateHeader)
+		signingHeaders = append(signingHeaders, dateHeader)
 	}
 
 	host := parsedURL.Host
@@ -57,13 +61,13 @@ func GetAWSV4Authorization(req *hm.Request, awsCreds creds.AWSV4Creds) (string, 
 
 	canonicalURI, err := awsCanonicalURI(parsedURL)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	canonicalQuery, err := awsCanonicalQuery(parsedURL.RawQuery)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	canonicalHeaders, signedHeaders := awsCanonicalHeaders(req.Headers, host)
+	canonicalHeaders, signedHeaders := awsCanonicalHeaders(signingHeaders, host)
 
 	canonicalRequest := strings.Join([]string{
 		strings.ToUpper(req.Method),
@@ -91,33 +95,32 @@ func GetAWSV4Authorization(req *hm.Request, awsCreds creds.AWSV4Creds) (string, 
 	signature := hex.EncodeToString(utils.CalculateHMACChain(signingKey, []string{stringToSign}, "SHA256"))
 
 	return fmt.Sprintf("%s Credential=%s/%s, SignedHeaders=%s, Signature=%s",
-		aws4Algorithm, awsCreds.AccessKeyID, scope, signedHeaders, signature), nil
+		aws4Algorithm, awsCreds.AccessKeyID, scope, signedHeaders, signature), extraHeaders, nil
 }
 
-func getAWSRequestTime(req *hm.Request) (time.Time, string, error) {
-	if value := requestHeaderValue(req.Headers, awsDateHeader); value != "" {
-		t, err := time.Parse("20060102T150405Z", value)
+func getAWSRequestTime(headers []hm.Header) (time.Time, string, bool, error) {
+	if value := requestHeaderValue(headers, awsDateHeader); value != "" {
+		t, err := time.Parse(utils.GetTimeFormatPattern(), value)
 		if err != nil {
-			return time.Time{}, "", fmt.Errorf("invalid %s: %w", awsDateHeader, err)
+			return time.Time{}, "", false, fmt.Errorf("invalid %s: %w", awsDateHeader, err)
 		}
-		return t, value, nil
+		return t, value, false, nil
 	}
-	if value := requestHeaderValue(req.Headers, "Date"); value != "" {
+	if value := requestHeaderValue(headers, "Date"); value != "" {
 		t, err := time.Parse(time.RFC1123, value)
 		if err != nil {
 			t, err = time.Parse(time.RFC1123Z, value)
 		}
 		if err != nil {
-			return time.Time{}, "", fmt.Errorf("invalid Date header: %w", err)
+			return time.Time{}, "", false, fmt.Errorf("invalid Date header: %w", err)
 		}
 		t = t.UTC()
-		return t, t.Format("20060102T150405Z"), nil
+		return t, t.Format(utils.GetTimeFormatPattern()), true, nil
 	}
 
 	t := time.Now().UTC()
-	value := t.Format("20060102T150405Z")
-	setRequestHeader(req, awsDateHeader, value)
-	return t, value, nil
+	value := t.Format(utils.GetTimeFormatPattern())
+	return t, value, true, nil
 }
 
 func awsCanonicalURI(u *url.URL) (string, error) {
@@ -125,11 +128,11 @@ func awsCanonicalURI(u *url.URL) (string, error) {
 	if path == "" {
 		path = "/"
 	}
-	const hexDigits = "0123456789ABCDEF"
+	hexDigits := utils.GetHexDigits()
 	var result strings.Builder
 	for i := 0; i < len(path); i++ {
 		c := path[i]
-		if c == '%' && i+2 < len(path) && isHex(path[i+1]) && isHex(path[i+2]) {
+		if c == '%' && i+2 < len(path) && utils.IsHex(path[i+1]) && utils.IsHex(path[i+2]) {
 			result.WriteByte('%')
 			result.WriteByte(byte(strings.ToUpper(string(path[i+1]))[0]))
 			result.WriteByte(byte(strings.ToUpper(string(path[i+2]))[0]))
@@ -146,10 +149,6 @@ func awsCanonicalURI(u *url.URL) (string, error) {
 		}
 	}
 	return result.String(), nil
-}
-
-func isHex(c byte) bool {
-	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }
 
 func awsCanonicalQuery(rawQuery string) (string, error) {
@@ -210,7 +209,7 @@ func normalizeAWSHeaderValue(value string) string {
 }
 
 func awsURIEncode(value string, preserveSlash bool) string {
-	const hexDigits = "0123456789ABCDEF"
+	hexDigits := utils.GetHexDigits()
 	var result strings.Builder
 	for i := 0; i < len(value); i++ {
 		c := value[i]
@@ -227,15 +226,3 @@ func awsURIEncode(value string, preserveSlash bool) string {
 	return result.String()
 }
 
-func setRequestHeader(req *hm.Request, name, value string) {
-	for i := range req.Headers {
-		if strings.EqualFold(req.Headers[i].Name, name) {
-			valueCopy := value
-			req.Headers[i].Value = &valueCopy
-			req.Headers[i].Values = nil
-			return
-		}
-	}
-	valueCopy := value
-	req.Headers = append(req.Headers, hm.Header{Name: name, Value: &valueCopy})
-}

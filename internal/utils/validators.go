@@ -189,26 +189,20 @@ func ValidateCreds(id string, c creds.Creds) error {
 }
 
 func ValidateHMACSignatureRequest(signature string, req hm.Request) error {
-	return validateSignatureRequest([]string{signature}, req, "HMAC")
-}
-
-func validateSignatureRequest(signatures []string, req hm.Request, authType string) error {
-	for _, signature := range signatures {
-		for _, placeholder := range GetAllSignaturePlaceholders(signature) {
-			if ReplaceHeaderNameWithWildcard(placeholder) != constants.SP_Header {
-				continue
+	for _, placeholder := range GetAllSignaturePlaceholders(signature) {
+		if ReplaceHeaderNameWithWildcard(placeholder) != constants.SP_Header {
+			continue
+		}
+		headerName := GetHeaderNameFromPlaceholder(placeholder)
+		found := false
+		for _, header := range req.Headers {
+			if strings.EqualFold(header.Name, headerName) {
+				found = true
+				break
 			}
-			headerName := GetHeaderNameFromPlaceholder(placeholder)
-			found := false
-			for _, header := range req.Headers {
-				if strings.EqualFold(header.Name, headerName) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return fmt.Errorf("%s signature references header %s, but it is missing from Request", authType, headerName)
-			}
+		}
+		if !found {
+			return fmt.Errorf("HMAC signature references header %s, but it is missing from Request", headerName)
 		}
 	}
 	return nil

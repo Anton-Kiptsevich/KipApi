@@ -174,93 +174,77 @@ func InitAuthorizationIfNeeded(call hm.ApiCall) (hm.Request, error) {
 		return call.Request, nil
 	}
 	
-	var hmacCreds creds.HMACCreds
-	var awsCreds creds.AWSV4Creds
-	var apiKeyCreds creds.ApiKeyCreds
-	ok := false
-	headerName := "Authorization"
-	if call.AuthMethod == constants.AM_Header {
-		apiKeyCreds, ok = currentCreds.Creds.(creds.ApiKeyCreds)
-		if !ok {
-			panic("Auth Method/Creds Type discrepancy")
-		}
-		headerName = apiKeyCreds.FieldName
-	}
-	if call.AuthMethod == constants.AM_HMAC {
-		hmacCreds, ok = currentCreds.Creds.(creds.HMACCreds)
-		if !ok {
-			panic("Auth Method/Creds Type discrepancy")
-		}
-		headerName = hmacCreds.SignatureHeaderName
-	}
-	if call.AuthMethod == constants.AM_AWS {
-		awsCreds, ok = currentCreds.Creds.(creds.AWSV4Creds)
-		if !ok {
-			panic("Auth Method/Creds Type discrepancy")
-		}
-	}
-	for _, h := range call.Request.Headers {
-		if strings.EqualFold(h.Name, headerName) {
-			return call.Request, nil
-		}
-	}
+	authHeaders := make([]hm.Header, 0, 3)
+	owerrideExisted := false
 
-	headerValue := ""
 	switch call.AuthMethod {
 	case constants.AM_Basic:
 		basic, ok := currentCreds.Creds.(creds.BasicCreds)
-		if !ok {
-			panic("Auth Method/Creds Type discrepancy")
-		}
-		headerValue = "Basic " + base64.StdEncoding.EncodeToString([]byte(basic.Username + ":" + basic.Password))
+		if !ok { panic("Auth Method/Creds Type discrepancy") }
+		value := "Basic " + base64.StdEncoding.EncodeToString([]byte(basic.Username+":"+basic.Password))
+		authHeaders = append(authHeaders, hm.Header{Name: "Authorization", Value: &value})
 
 	case constants.AM_Bearer:
 		var token string
 		switch currentCreds.CredsType {
 		case constants.CT_Bearer:
 			bearer, ok := currentCreds.Creds.(creds.BearerCreds)
-			if !ok {
-				panic("Auth Method/Creds Type discrepancy")
-			}
+			if !ok { panic("Auth Method/Creds Type discrepancy") }
 			token = bearer.Token
 		case constants.CT_OAuth2:
 			oauth2, ok := currentCreds.Creds.(creds.OAuth2Creds)
-			if !ok {
-				panic("Auth Method/Creds Type discrepancy")
-			}
+			if !ok { panic("Auth Method/Creds Type discrepancy") }
 			token = oauth2.AccessToken
 		default:
 			panic("Auth Method/Creds Type discrepancy")
 		}
-		headerValue = "Bearer " + token
+		value := "Bearer " + token
+		authHeaders = append(authHeaders, hm.Header{Name: "Authorization", Value: &value})
 
 	case constants.AM_Header:
-		headerValue = apiKeyCreds.ApiKey
+		apiKey, ok := currentCreds.Creds.(creds.ApiKeyCreds)
+		if !ok { panic("Auth Method/Creds Type discrepancy") }
+		value := apiKey.ApiKey
+		authHeaders = append(authHeaders, hm.Header{Name: apiKey.FieldName, Value: &value})
 
 	case constants.AM_Digest:
-		headerValue, err = auth.GetDigestAuthorization(call.Request, currentCreds)
-		if err != nil {
-			return call.Request, err
-		}
+		value, err := auth.GetDigestAuthorization(call.Request, currentCreds)
+		if err != nil { return call.Request, err }
+		authHeaders = append(authHeaders, hm.Header{Name: "Authorization", Value: &value})
 
 	case constants.AM_HMAC:
-		headerValue, err = auth.GetHMACSignature(call.Request, hmacCreds)
-		if err != nil {
-			return call.Request, err
-		}
+		hmacCreds, ok := currentCreds.Creds.(creds.HMACCreds)
+		if !ok { panic("Auth Method/Creds Type discrepancy") }
+		value, err := auth.GetHMACSignature(call.Request, hmacCreds)
+		if err != nil { return call.Request, err }
+		authHeaders = append(authHeaders, hm.Header{Name: hmacCreds.SignatureHeaderName, Value: &value})
 
 	case constants.AM_AWS:
-		headerValue, err = auth.GetAWSV4Authorization(&call.Request, awsCreds)
-		if err != nil {
-			return call.Request, err
-		}
-
+		awsCreds, ok := currentCreds.Creds.(creds.AWSV4Creds)
+		if !ok { panic("Auth Method/Creds Type discrepancy") }
+		value, awsHeaders, err := auth.GetAWSV4Authorization(call.Request, awsCreds)
+		if err != nil { return call.Request, err }
+		authHeaders = append(authHeaders, hm.Header{Name: "Authorization", Value: &value})
+		authHeaders = append(authHeaders, awsHeaders...)
+		owerrideExisted = len(awsHeaders) == 2
 	}
 
-	headers := make([]hm.Header, 0, len(call.Request.Headers)+1)
-	headers = append(headers, call.Request.Headers...)
-	headers = append(headers, hm.Header{Name: headerName, Value: &headerValue})
-	call.Request.Headers = headers
+	for _, authHeader := range authHeaders {
+		existingIndex := -1
+		for i, requestHeader := range call.Request.Headers {
+			if strings.EqualFold(requestHeader.Name, authHeader.Name) {
+				existingIndex = i
+				break
+			}
+		}
+		if existingIndex >= 0 {
+			if owerrideExisted {
+				call.Request.Headers[existingIndex] = authHeader
+			}
+			continue
+		}
+		call.Request.Headers = append(call.Request.Headers, authHeader)
+	}
 
 	return call.Request, nil
 }
