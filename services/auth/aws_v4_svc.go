@@ -23,25 +23,27 @@ const (
 	awsPayloadHashHeader = "X-Amz-Content-Sha256"
 )
 
-func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) ([]hm.Header, error) {
+func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) ([]hm.Header, bool, error) {
 	parsedURL, err := url.Parse(req.BaseUrl + req.Path)
 	if err != nil {
-		return nil, fmt.Errorf("parse request URL: %w", err)
+		return nil, false, fmt.Errorf("parse request URL: %w", err)
 	}
 	if parsedURL.Host == "" {
-		return nil, fmt.Errorf("request URL must contain a host")
+		return nil, false, fmt.Errorf("request URL must contain a host")
 	}
 
 	requestTime, timestamp, addDateHeader, err := getAWSRequestTime(req.Headers)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
+	overrideExistingHeaders := requestHeaderValue(req.Headers, awsDateHeader) != "" ||
+		requestHeaderValue(req.Headers, "Date") != ""
 	date := requestTime.Format(utils.GetDateFormatPattern())
 
 	payloadHash := sha256.Sum256([]byte(req.Body))
 	payloadHashHex := hex.EncodeToString(payloadHash[:])
 	if existing := requestHeaderValue(req.Headers, awsPayloadHashHeader); existing != "" && existing != payloadHashHex {
-		return nil, fmt.Errorf("%s does not match the request body SHA-256", awsPayloadHashHeader)
+		return nil, false, fmt.Errorf("%s does not match the request body SHA-256", awsPayloadHashHeader)
 	}
 	extraHeaders := []hm.Header{newAWSHeader(awsPayloadHashHeader, payloadHashHex)}
 	signingHeaders := append([]hm.Header(nil), req.Headers...)
@@ -61,11 +63,11 @@ func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) ([]hm.Head
 
 	canonicalURI, err := awsCanonicalURI(parsedURL)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	canonicalQuery, err := awsCanonicalQuery(parsedURL.RawQuery)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	canonicalHeaders, signedHeaders := awsCanonicalHeaders(signingHeaders, host)
 
@@ -96,7 +98,7 @@ func GetAWSV4Authorization(req hm.Request, awsCreds creds.AWSV4Creds) ([]hm.Head
 
 	authorization := fmt.Sprintf("%s Credential=%s/%s, SignedHeaders=%s, Signature=%s",
 		aws4Algorithm, awsCreds.AccessKeyID, scope, signedHeaders, signature)
-	return append([]hm.Header{newAWSHeader("Authorization", authorization)}, extraHeaders...), nil
+	return append([]hm.Header{newAWSHeader("Authorization", authorization)}, extraHeaders...), overrideExistingHeaders, nil
 }
 
 func newAWSHeader(name, value string) hm.Header {

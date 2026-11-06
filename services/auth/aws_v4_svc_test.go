@@ -16,7 +16,7 @@ import (
 func TestGetAWSV4AuthorizationWithExistingDate(t *testing.T) {
 	const requestDate = "20261106T090000Z"
 
-	headers, err := GetAWSV4Authorization(hm.Request{
+	headers, overrideExistingHeaders, err := GetAWSV4Authorization(hm.Request{
 		Method:  "GET",
 		BaseUrl: "https://api.example.com",
 		Path:    "/resource",
@@ -29,6 +29,9 @@ func TestGetAWSV4AuthorizationWithExistingDate(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("GetAWSV4Authorization() error = %v", err)
+	}
+	if !overrideExistingHeaders {
+		t.Error("overrideExistingHeaders = false, want true when the request already has X-Amz-Date")
 	}
 
 	if len(headers) != 2 {
@@ -60,7 +63,7 @@ func TestGetAWSV4AuthorizationWithExistingDate(t *testing.T) {
 }
 
 func TestGetAWSV4AuthorizationWithoutDate(t *testing.T) {
-	headers, err := GetAWSV4Authorization(hm.Request{
+	headers, overrideExistingHeaders, err := GetAWSV4Authorization(hm.Request{
 		Method:  "GET",
 		BaseUrl: "https://api.example.com",
 		Path:    "/resource",
@@ -76,6 +79,9 @@ func TestGetAWSV4AuthorizationWithoutDate(t *testing.T) {
 
 	if len(headers) != 3 {
 		t.Fatalf("GetAWSV4Authorization() returned %d headers, want 3", len(headers))
+	}
+	if overrideExistingHeaders {
+		t.Error("overrideExistingHeaders = true, want false when the request has no date header")
 	}
 
 	if got := awsV4TestHeaderValue(headers, "Authorization"); got == "" {
@@ -152,7 +158,7 @@ func TestGetAWSV4AuthorizationErrors(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := GetAWSV4Authorization(test.req, testAWSV4Creds())
+			_, _, err := GetAWSV4Authorization(test.req, testAWSV4Creds())
 			if err == nil {
 				t.Fatal("GetAWSV4Authorization() error = nil")
 			}
@@ -167,7 +173,7 @@ func TestGetAWSV4AuthorizationUsesDateHeader(t *testing.T) {
 	const dateHeader = "Fri, 06 Nov 2026 09:00:00 GMT"
 	const expectedDate = "20261106T090000Z"
 
-	headers, err := GetAWSV4Authorization(hm.Request{
+	headers, overrideExistingHeaders, err := GetAWSV4Authorization(hm.Request{
 		Method:  "GET",
 		BaseUrl: "https://api.example.com",
 		Path:    "/resource",
@@ -175,6 +181,9 @@ func TestGetAWSV4AuthorizationUsesDateHeader(t *testing.T) {
 	}, testAWSV4Creds())
 	if err != nil {
 		t.Fatalf("GetAWSV4Authorization() error = %v", err)
+	}
+	if !overrideExistingHeaders {
+		t.Error("overrideExistingHeaders = false, want true when the request already has Date")
 	}
 
 	if len(headers) != 3 {
@@ -187,7 +196,7 @@ func TestGetAWSV4AuthorizationUsesDateHeader(t *testing.T) {
 
 func TestGetAWSV4AuthorizationPrefersAWSDateHeader(t *testing.T) {
 	const awsDate = "20261106T090000Z"
-	headers, err := GetAWSV4Authorization(hm.Request{
+	headers, overrideExistingHeaders, err := GetAWSV4Authorization(hm.Request{
 		Method:  "GET",
 		BaseUrl: "https://api.example.com",
 		Path:    "/resource",
@@ -218,7 +227,7 @@ func TestGetAWSV4AuthorizationAcceptsMatchingPayloadHash(t *testing.T) {
 	hash := sha256.Sum256([]byte(body))
 	payloadHash := hex.EncodeToString(hash[:])
 
-	headers, err := GetAWSV4Authorization(hm.Request{
+	headers, overrideExistingHeaders, err := GetAWSV4Authorization(hm.Request{
 		Method:  "POST",
 		BaseUrl: "https://api.example.com",
 		Path:    "/resource",
@@ -246,7 +255,7 @@ func TestGetAWSV4AuthorizationDoesNotMutateRequest(t *testing.T) {
 		},
 	}
 
-	_, err := GetAWSV4Authorization(request, testAWSV4Creds())
+	_, _, err := GetAWSV4Authorization(request, testAWSV4Creds())
 	if err != nil {
 		t.Fatalf("GetAWSV4Authorization() error = %v", err)
 	}
@@ -271,13 +280,13 @@ func TestGetAWSV4AuthorizationSignatureChangesWithSignedRequest(t *testing.T) {
 		Headers: []hm.Header{newAWSHeader(awsDateHeader, requestDate)},
 	}
 
-	first, err := GetAWSV4Authorization(request, testAWSV4Creds())
+	first, _, err := GetAWSV4Authorization(request, testAWSV4Creds())
 	if err != nil {
 		t.Fatalf("first GetAWSV4Authorization() error = %v", err)
 	}
 
 	request.Path = "/another-resource"
-	second, err := GetAWSV4Authorization(request, testAWSV4Creds())
+	second, _, err := GetAWSV4Authorization(request, testAWSV4Creds())
 	if err != nil {
 		t.Fatalf("second GetAWSV4Authorization() error = %v", err)
 	}
@@ -512,7 +521,7 @@ func TestGetAWSV4AuthorizationMatchesAWSReferenceVector(t *testing.T) {
 		Service:         "host",
 	}
 
-	headers, err := GetAWSV4Authorization(request, credentials)
+	headers, overrideExistingHeaders, err := GetAWSV4Authorization(request, credentials)
 	if err != nil {
 		t.Fatalf("GetAWSV4Authorization() error = %v", err)
 	}
